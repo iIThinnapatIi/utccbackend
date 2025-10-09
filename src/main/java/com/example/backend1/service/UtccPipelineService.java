@@ -1,41 +1,62 @@
 package com.example.backend1.service;
 
-import com.example.backend1.model.Post;
-import com.example.backend1.model.PostTag;
-import com.example.backend1.model.Source;
-import com.example.backend1.model.Sentiment;
-import com.example.backend1.model.TagType;
+import com.example.backend1.mentions.ClassificationService;
+// ปรับ import ให้ตรงกับโปรเจกต์ของคุณเองด้านล่างนี้
+// import com.example.backend1.model.*;
+// import com.example.backend1.repository.*;
+
+import com.example.backend1.model.*;
 import com.example.backend1.repository.PostRepository;
 import com.example.backend1.repository.PostTagRepository;
-
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class UtccPipelineService {
+
     private final TextUtils textUtils;
     private final SentimentRules sentimentRules;
     private final RelevanceScorer relevanceScorer;
-    private final Classifier classifier;
+    private final ClassificationService classification;
     private final PostRepository postRepo;
     private final PostTagRepository tagRepo;
 
+    // ✅ เขียน constructor เอง แทน Lombok @RequiredArgsConstructor
+    public UtccPipelineService(
+            TextUtils textUtils,
+            SentimentRules sentimentRules,
+            RelevanceScorer relevanceScorer,
+            ClassificationService classification,
+            PostRepository postRepo,
+            PostTagRepository tagRepo
+    ) {
+        this.textUtils = textUtils;
+        this.sentimentRules = sentimentRules;
+        this.relevanceScorer = relevanceScorer;
+        this.classification = classification;
+        this.postRepo = postRepo;
+        this.tagRepo = tagRepo;
+    }
+
     @Transactional
-    public Post processAndSave(Source source, String extId, String author, String textRaw,
-                               String url, LocalDateTime createdAt, boolean hasMedia) {
+    public Post processAndSave(
+            Source source,
+            String extId,
+            String author,
+            String textRaw,
+            String url,
+            LocalDateTime createdAt,
+            boolean hasMedia
+    ) {
         String norm = textUtils.normalize(textRaw);
         String lang = textUtils.detectLang(norm);
         double rel = relevanceScorer.score(norm);
         Sentiment senti = sentimentRules.infer(norm);
-
-        // ถ้าคะแนนเกี่ยวข้องต่ำมาก สามารถเลือก drop ได้
-        // if (rel < 0.2) return null;
 
         Post post = postRepo.findBySourceAndExtId(source, extId).orElseGet(Post::new);
         post.setSource(source);
@@ -53,15 +74,31 @@ public class UtccPipelineService {
 
         Post saved = postRepo.save(post);
 
-        // rewrite tags อย่างง่าย
+        // เขียนแท็กใหม่ทั้งหมด
         tagRepo.deleteAll(tagRepo.findByPostId(saved.getId()));
-        saveTags(saved, TagType.faculty, classifier.detectFaculty(norm));
-        saveTags(saved, TagType.topic, classifier.detectTopics(norm));
-        saveTags(saved, TagType.entity, classifier.detectEntities(norm));
+
+        // 1) คณะ/UTCC
+        String faculty = classification.detectFacultyTagOrNull(norm);
+        if (faculty != null && !faculty.isBlank()) {
+            saveTags(saved, TagType.faculty, Set.of(faculty));
+        }
+
+        // 2) topic: categories ที่ไม่ใช่ "คณะ..." หรือ "UTCC"
+        var cats = classification.detectCategories(norm);
+        Set<String> topics = cats.stream()
+                .filter(c -> !(c.startsWith("คณะ") || "UTCC".equals(c)))
+                .collect(Collectors.toSet());
+        if (!topics.isEmpty()) {
+            saveTags(saved, TagType.topic, topics);
+        }
+
+        // 3) ถ้าต้องมี entity ภายหลัง ค่อยเพิ่มกฎ/เมธอดใน ClassificationService แล้วมาเรียกตรงนี้
+
         return saved;
     }
 
     private void saveTags(Post p, TagType type, Set<String> values) {
+        if (values == null || values.isEmpty()) return;
         for (String v : values) {
             PostTag t = new PostTag();
             t.setPost(p);

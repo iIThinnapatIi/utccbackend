@@ -16,7 +16,7 @@ public class TwitterService {
     private final TweetRepository tweetRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String BEARER_TOKEN = "ถ้าจะดึงเพิ่ม ใส่api tw ของพวกมึงตรงนี้";
+    private static final String BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAAEcs4QEAAAAAFkDaxozZaV8KDJpoxYeMEVpcdt8=90NI8KAmaFekAXm3BskwFKf3qYjPIBEPNK3pqpHJvEQJLfcwFV";
 
     public TwitterService(WebClient.Builder builder, TweetRepository tweetRepository) {
         this.webClient = builder.baseUrl("https://api.twitter.com/2").build();
