@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TyphoonAnalysisRepository extends JpaRepository<TyphoonAnalysis, Long> {
     boolean existsBySourceTableAndSourceId(String sourceTable, String sourceId);
+
 }
+
 
 
