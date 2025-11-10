@@ -1,20 +1,19 @@
 package com.example.backend1.settings;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+// ถ้าต้องการให้ front-end เรียกข้ามโดเมน ใส่ @CrossOrigin ได้
+//@CrossOrigin(origins = "*")
 @RestController
-@RequestMapping("/settings") // ตรงกับที่ frontend เรียก
-@RequiredArgsConstructor
-@CrossOrigin(
-        origins = { "http://localhost:5173", "http://127.0.0.1:5173" },
-        allowedHeaders = "*",
-        methods = { RequestMethod.GET, RequestMethod.PUT },
-        allowCredentials = "true"
-)
+@RequestMapping("/api/settings")
 public class SettingsController {
 
     private final SettingsService service;
+
+    // ✅ เขียน constructor เอง (แทน Lombok @RequiredArgsConstructor)
+    public SettingsController(SettingsService service) {
+        this.service = service;
+    }
 
     @GetMapping
     public SettingsDto get() {
@@ -22,7 +21,7 @@ public class SettingsController {
     }
 
     @PutMapping
-    public SettingsDto update(@RequestBody SettingsDto body) {
-        return service.update(body);
+    public SettingsDto update(@RequestBody SettingsDto dto) {
+        return service.update(dto);
     }
 }
