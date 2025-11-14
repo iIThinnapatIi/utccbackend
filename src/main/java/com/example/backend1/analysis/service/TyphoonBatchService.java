@@ -10,11 +10,15 @@ import com.example.backend1.ingest.twitter.Tweet;
 import com.example.backend1.ingest.twitter.TweetRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Service
 public class TyphoonBatchService {
@@ -50,7 +54,8 @@ public class TyphoonBatchService {
             req.setApp("web");
             req.setSource("twitter");
             req.setModel("qwen2.5:7b-instruct");
-            req.setTemperature(0.7);
+            // ลด temperature ให้ผลนิ่งขึ้น
+            req.setTemperature(0.3);
             req.setMaxTokens(256);
             req.setSave(false);
 
@@ -79,6 +84,12 @@ public class TyphoonBatchService {
             row.setSentiment(nullIfEmpty(res.getSentiment()));
             row.setTopic(nullIfEmpty(res.getTopic()));
             row.setSummary(extractSummaryOrFallback(res.getAnswerRaw(), text));
+
+            // เติมฟิลด์วิเคราะห์เชิงลึกเพิ่มเติม
+            row.setToxicity(toxicityScore(res.getToxicity()));   // ← แปลงเป็น BigDecimal
+            row.setNsfw(nullIfEmpty(res.getNsfw()));
+            row.setFacultyCode(extractFacultyCode(res.getFacultyGuessJson()));
+            row.setTopicsJson(buildTopicsJson(res));
 
             // created_at ใช้เวลาต้นฉบับถ้ามี ไม่งั้น now
             LocalDateTime createdAt = parseTimeOrNull(safeTweetCreatedAt(t));
@@ -112,7 +123,8 @@ public class TyphoonBatchService {
             req.setApp("web");
             req.setSource("pantip");
             req.setModel("qwen2.5:7b-instruct");
-            req.setTemperature(0.7);
+            // ลด temperature ให้ผลนิ่งขึ้น
+            req.setTemperature(0.3);
             req.setMaxTokens(256);
             req.setSave(false);
 
@@ -139,7 +151,14 @@ public class TyphoonBatchService {
             row.setSentiment(nullIfEmpty(res.getSentiment()));
             row.setTopic(nullIfEmpty(res.getTopic()));
             row.setSummary(extractSummaryOrFallback(res.getAnswerRaw(), base));
-            row.setCreatedAt(java.time.LocalDateTime.now());
+
+            // เติมฟิลด์วิเคราะห์เชิงลึกเพิ่มเติม
+            row.setToxicity(toxicityScore(res.getToxicity()));   // ← แปลงเป็น BigDecimal
+            row.setNsfw(nullIfEmpty(res.getNsfw()));
+            row.setFacultyCode(extractFacultyCode(res.getFacultyGuessJson()));
+            row.setTopicsJson(buildTopicsJson(res));
+
+            row.setCreatedAt(LocalDateTime.now());
             row.setAnalyzedAtValue(LocalDateTime.now());
 
             typhoonRepo.save(row);
@@ -153,17 +172,105 @@ public class TyphoonBatchService {
         return inserted;
     }
 
-
-
     // -------- utils --------
     private String extractSummaryOrFallback(String answerRaw, String fallback) {
-        if (answerRaw == null || answerRaw.isBlank()) return cut(fallback);
+        // ถ้าไม่มีข้อมูลหรือเป็นค่าว่าง → ใช้ fallback (ข้อความดิบ)
+        if (answerRaw == null || answerRaw.isBlank()) {
+            return cut(fallback);
+        }
+
         try {
             JsonNode n = mapper.readTree(answerRaw);
-            String s = n.path("summary").asText("");
-            return s.isBlank() ? cut(fallback) : s;
-        } catch (Exception ignore) {
+
+            // ดึง field ตามที่ prompt ใหม่กำหนด
+            String summary = n.path("summary").asText("").trim();
+            String reason  = n.path("reason").asText("").trim();
+
+            // ดึง evidence เป็น list
+            List<String> evidences = new ArrayList<>();
+            if (n.has("evidence") && n.get("evidence").isArray()) {
+                for (JsonNode e : n.get("evidence")) {
+                    String text = e.asText("").trim();
+                    if (!text.isEmpty()) {
+                        evidences.add(text);
+                    }
+                }
+            }
+
+            // ---------- ประมวลผล summary ----------
+            // ถ้า summary ว่าง → ใช้ fallback
+            String base = summary.isBlank() ? cut(fallback) : summary;
+
+            // สร้าง StringBuilder สำหรับข้อความสุดท้าย
+            StringBuilder sb = new StringBuilder(base);
+
+            // ---------- เพิ่มเหตุผล (reason) ----------
+            if (!reason.isBlank()) {
+                sb.append(" | เหตุผล: ").append(reason);
+            }
+
+            // ---------- เพิ่มหลักฐาน (evidence) ----------
+            if (!evidences.isEmpty()) {
+                // ลบคำที่ซ้ำกันและทำให้อ่านง่าย (กันโมเดลตอบซ้ำ)
+                LinkedHashSet<String> uniqueEvidence = new LinkedHashSet<>(evidences);
+                sb.append(" | หลักฐาน: ").append(String.join(", ", uniqueEvidence));
+            }
+
+            // ตัดความยาวให้ปลอดภัยก่อนเก็บ DB
+            return cut(sb.toString());
+
+        } catch (Exception ex) {
+            // ถ้า JSON พัง หรือ parse ไม่ได้ → ใช้ fallback
             return cut(fallback);
+        }
+    }
+
+    // ดึง faculty_code จาก JSON เช่น {"code":"BUA","name":"บริหารธุรกิจ","reason":"..."}
+    private String extractFacultyCode(String facultyGuessJson) {
+        if (facultyGuessJson == null || facultyGuessJson.isBlank()) return null;
+        try {
+            JsonNode n = mapper.readTree(facultyGuessJson);
+            String code = n.path("code").asText("").trim();
+            if (code.isEmpty() || "unknown".equalsIgnoreCase(code)) {
+                return null;
+            }
+            return code;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // สร้าง JSON สำหรับเก็บใน topics_json
+    private String buildTopicsJson(AnalyzeResponse res) {
+        try {
+            ObjectNode root = mapper.createObjectNode();
+            root.put("topic", nvl(res.getTopic()));
+            root.put("intent", nvl(res.getIntent()));
+            root.put("utcc_relevance", nvl(res.getUtccRelevance()));
+            root.put("actor", nvl(res.getActor()));
+            root.put("hidden_meaning", nvl(res.getHiddenMeaning()));
+            return root.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // แปลงค่า toxicity จาก string → BigDecimal ให้ตรงกับ type ใน TyphoonAnalysis
+    private BigDecimal toxicityScore(String toxicity) {
+        String v = nvl(toxicity).toLowerCase();
+
+        switch (v) {
+            case "":
+            case "none":
+                return BigDecimal.ZERO;              // 0 = ไม่มีความเป็นพิษ
+            case "low":
+                return BigDecimal.ONE;               // 1 = ต่ำ
+            case "medium":
+                return BigDecimal.valueOf(2);        // 2 = ปานกลาง
+            case "high":
+                return BigDecimal.valueOf(3);        // 3 = สูง
+            default:
+                return null;                         // ถ้า LLM ตอบเพี้ยน ให้เป็น null
         }
     }
 
