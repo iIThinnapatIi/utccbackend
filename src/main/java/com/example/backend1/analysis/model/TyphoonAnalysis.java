@@ -6,72 +6,73 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "typhoon_analysis")
-@Access(AccessType.FIELD) // ให้ Hibernate แมปจาก "field" อย่างเดียว
+@Access(AccessType.FIELD) // ให้ Hibernate แมปจาก field names → column names (snake_case)
 public class TyphoonAnalysis {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(length = 32, nullable = false)
+    // แอปต้นทาง เช่น "tweet", "pantip_post"
+    // column: app
     private String app;
 
-    @Column(name = "source_table", length = 64, nullable = false)
+    // ตารางต้นทาง + id ต้นทาง
+    // column: source_table, source_id
     private String sourceTable;
-
-    @Column(name = "source_id", length = 128, nullable = false)
     private String sourceId;
 
-    @Column(name = "post_type", length = 32)
+    // ประเภทโพสต์ เช่น post / comment
+    // column: post_type
     private String postType;
 
-    @Column(length = 8)
+    // ภาษา เช่น "th"
     private String language;
 
-    @Column(length = 32)
+    // sentiment = positive / neutral / negative
     private String sentiment;
 
-    @Column(name = "sentiment_score", precision = 8, scale = 4)
+    // คะแนน sentiment 0–100 (เก็บเป็นคอลัมน์ sentiment_score)
+    @Column(name = "sentiment_score", precision = 5, scale = 2)
     private BigDecimal sentimentScore;
 
-    @Column(length = 128)
+    // topic แบบสั้น ๆ เช่น admission / tuition_and_loan
     private String topic;
 
-    @Column(name = "topics_json", columnDefinition = "TEXT")
+    // JSON ละเอียดของการวิเคราะห์ (intent, emotion, impact ฯลฯ)
+    // column: topics_json
+    @Column(columnDefinition = "TEXT")
     private String topicsJson;
 
+    // สรุปโพสต์ภาษาไทย 1–2 ประโยค
     @Column(columnDefinition = "TEXT")
     private String summary;
 
-    @Column(name = "emotion_joy", precision = 8, scale = 4)
-    private BigDecimal emotionJoy;
-
-    @Column(name = "emotion_fear", precision = 8, scale = 4)
-    private BigDecimal emotionFear;
-
-    @Column(name = "emotion_sadness", precision = 8, scale = 4)
-    private BigDecimal emotionSadness;
-
-    @Column(name = "emotion_surprise", precision = 8, scale = 4)
-    private BigDecimal emotionSurprise;
-
-    @Column(precision = 8, scale = 4)
-    private BigDecimal toxicity;
-
-    @Column(length = 16)
+    // ระดับ toxicity / nsfw สรุป
+    private String toxicity;
     private String nsfw;
 
-    @Column(name = "faculty_code", length = 32)
+    // เดาคณะ / faculty_code เช่น BUA, ACC, COMM ฯลฯ
     private String facultyCode;
 
-    @Column(name = "created_at")
+    // เหตุผลที่ให้ sentiment นี้ (ภาษาไทยยาว ๆ)
+    @Column(name = "rationale_sentiment", columnDefinition = "TEXT")
+    private String rationaleSentiment;
+
+    // เหตุผลเรื่อง intent/เจตนา ของโพสต์
+    @Column(name = "rationale_intent", columnDefinition = "TEXT")
+    private String rationaleIntent;
+
+    // เวลาต้นทางของโพสต์ (หรือเวลาที่บันทึกครั้งแรก)
     private LocalDateTime createdAt;
 
-    // ฟิลด์จริงของคอลัมน์ analyzed_at
-    @Column(name = "analyzed_at")
+    // เวลา analyzed_at ที่ใช้เรียงลำดับ batch
     private LocalDateTime analyzedAt;
 
-    // -------- getters/setters อื่น ๆ --------
+    // ----------------------------------------------------
+    // getters / setters
+    // ----------------------------------------------------
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -105,20 +106,8 @@ public class TyphoonAnalysis {
     public String getSummary() { return summary; }
     public void setSummary(String summary) { this.summary = summary; }
 
-    public BigDecimal getEmotionJoy() { return emotionJoy; }
-    public void setEmotionJoy(BigDecimal emotionJoy) { this.emotionJoy = emotionJoy; }
-
-    public BigDecimal getEmotionFear() { return emotionFear; }
-    public void setEmotionFear(BigDecimal emotionFear) { this.emotionFear = emotionFear; }
-
-    public BigDecimal getEmotionSadness() { return emotionSadness; }
-    public void setEmotionSadness(BigDecimal emotionSadness) { this.emotionSadness = emotionSadness; }
-
-    public BigDecimal getEmotionSurprise() { return emotionSurprise; }
-    public void setEmotionSurprise(BigDecimal emotionSurprise) { this.emotionSurprise = emotionSurprise; }
-
-    public BigDecimal getToxicity() { return toxicity; }
-    public void setToxicity(BigDecimal toxicity) { this.toxicity = toxicity; }
+    public String getToxicity() { return toxicity; }
+    public void setToxicity(String toxicity) { this.toxicity = toxicity; }
 
     public String getNsfw() { return nsfw; }
     public void setNsfw(String nsfw) { this.nsfw = nsfw; }
@@ -126,10 +115,19 @@ public class TyphoonAnalysis {
     public String getFacultyCode() { return facultyCode; }
     public void setFacultyCode(String facultyCode) { this.facultyCode = facultyCode; }
 
+    public String getRationaleSentiment() { return rationaleSentiment; }
+    public void setRationaleSentiment(String rationaleSentiment) { this.rationaleSentiment = rationaleSentiment; }
+
+    public String getRationaleIntent() { return rationaleIntent; }
+    public void setRationaleIntent(String rationaleIntent) { this.rationaleIntent = rationaleIntent; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
-    // -------- helper ที่ไม่ให้ Hibernate แมป (ป้องกันคอลัมน์ซ้ำ) --------
+    public LocalDateTime getAnalyzedAt() { return analyzedAt; }
+    public void setAnalyzedAt(LocalDateTime analyzedAt) { this.analyzedAt = analyzedAt; }
+
+    // -------- helper ที่ TyphoonBatchService ใช้ (ไม่ให้ Hibernate แมปซ้ำ) --------
     @Transient
     public LocalDateTime getAnalyzedAtValue() { return analyzedAt; }
 

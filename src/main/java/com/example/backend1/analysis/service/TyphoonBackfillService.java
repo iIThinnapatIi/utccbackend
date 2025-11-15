@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Service
@@ -41,6 +42,9 @@ public class TyphoonBackfillService {
         int inserted = 0;
         for (Tweet t : tweetRepo.findUnanalyzedTweets()) {
             String text = nvl(t.getText());
+            if (text.isBlank()) {
+                continue;
+            }
 
             AnalyzeRequest req = new AnalyzeRequest();
             req.setText(text);
@@ -50,7 +54,6 @@ public class TyphoonBackfillService {
             AnalyzeResponse res = analyzer.analyze(req);
             String summary = extractSummaryOrFallback(res.getAnswerRaw(), text);
 
-            // ✅ ใช้ no-args constructor แล้ว set ทีละฟิลด์
             TyphoonAnalysis row = new TyphoonAnalysis();
             row.setApp("twitter");
             row.setSourceTable("tweet");
@@ -60,7 +63,18 @@ public class TyphoonBackfillService {
             row.setSentiment(nullIfEmpty(res.getSentiment()));
             row.setTopic(nullIfEmpty(res.getTopic()));
             row.setSummary(summary);
-            row.setCreatedAt(parseTimeOrNull(t.getCreatedAt()));
+
+            // ⭐ คะแนน & เหตุผล สำหรับ backfill
+            if (res.getSentimentScore() != null) {
+                row.setSentimentScore(
+                        BigDecimal.valueOf(res.getSentimentScore())
+                );
+            }
+            row.setRationaleSentiment(nullIfEmpty(res.getRationaleSentiment()));
+            row.setRationaleIntent(nullIfEmpty(res.getRationaleIntent()));
+
+            // created_at จากต้นทาง (แปลงเป็น LocalDateTime ถ้าเป็น String)
+            row.setCreatedAt(parseTimeOrNull(String.valueOf(t.getCreatedAt())));
             row.setAnalyzedAtValue(LocalDateTime.now());
 
             if (!typhoonRepo.existsBySourceTableAndSourceId("tweet", String.valueOf(t.getId()))) {
@@ -78,6 +92,9 @@ public class TyphoonBackfillService {
             String base = nvl(p.getContent());
             if (base.isEmpty()) base = nvl(p.getPreview());
             if (base.isEmpty()) base = nvl(p.getTitle());
+            if (base.isBlank()) {
+                continue;
+            }
 
             AnalyzeRequest req = new AnalyzeRequest();
             req.setText(base);
@@ -96,6 +113,16 @@ public class TyphoonBackfillService {
             row.setSentiment(nullIfEmpty(res.getSentiment()));
             row.setTopic(nullIfEmpty(res.getTopic()));
             row.setSummary(summary);
+
+            // ⭐ คะแนน & เหตุผล สำหรับ backfill
+            if (res.getSentimentScore() != null) {
+                row.setSentimentScore(
+                        BigDecimal.valueOf(res.getSentimentScore())
+                );
+            }
+            row.setRationaleSentiment(nullIfEmpty(res.getRationaleSentiment()));
+            row.setRationaleIntent(nullIfEmpty(res.getRationaleIntent()));
+
             row.setCreatedAt(LocalDateTime.now());
             row.setAnalyzedAtValue(LocalDateTime.now());
 
@@ -108,6 +135,7 @@ public class TyphoonBackfillService {
     }
 
     // ---------- utils ----------
+
     private String extractSummaryOrFallback(String answerRaw, String fallback) {
         if (answerRaw == null) return cut(fallback);
         try {

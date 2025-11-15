@@ -235,7 +235,6 @@ public class PublicApiController {
         );
         List<Object> params = new ArrayList<>();
 
-        // ใช้ boundary แบบ half-open interval กัน LAST_DAY param ป่วง
         // from: >= CONCAT(from,'-01')
         if (from != null && !from.isBlank()) {
             sql.append("AND analyzed_at >= CONCAT(?, '-01') ");
@@ -266,6 +265,9 @@ public class PublicApiController {
                         "FROM typhoon_analysis WHERE 1=1 "
         );
         List<Object> params = new ArrayList<>();
+
+        // ❗ ตัด topic = 'unknown' ออกจาก Top 5 (เราไม่อยากให้หมวดไม่ระบุขึ้นมาแข่ง)
+        sql.append("AND COALESCE(topic, 'unknown') <> 'unknown' ");
 
         if (!from.isEmpty() && !to.isEmpty()) {
             sql.append("AND DATE(analyzed_at) BETWEEN ? AND ? ");
