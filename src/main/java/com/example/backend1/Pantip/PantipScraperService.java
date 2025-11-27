@@ -23,7 +23,7 @@ public class PantipScraperService {
     private final PantipPostRepository postRepo;
     private final PantipCommentRepository commentRepo;
 
-    //  TEMP เก็บโพสต์ชั่วคราวก่อนบันทึกจริง
+    // TEMP เก็บโพสต์ชั่วคราวก่อนบันทึกจริง
     private List<PantipPost> tempPosts = new ArrayList<>();
 
     @Autowired
@@ -34,18 +34,15 @@ public class PantipScraperService {
         this.commentRepo = commentRepo;
     }
 
-    /*
-     *   1) โหมด TEMP — ใช้ตอนค้นหาโพสต์จากหน้า Keywords
-     *     - ดึงโพสต์จากผลค้นหา Pantip
-     *     - ยังไม่บันทึก DB
-     *  */
+    /* ---------------------------------------------------------
+     * 1) โหมด TEMP — ใช้ตอนค้นหาโพสต์จากหน้า Keywords
+     * --------------------------------------------------------- */
     public List<PantipPost> scrapePantipTemp(String keyword) {
 
         tempPosts.clear(); // ล้าง temp ก่อนใช้งานใหม่
 
-        // กำหนด LIMIT ตรงนี้ให้ไม่อืดเกินไป
-        final int MAX_PAGES = 2;        // ดึงไม่เกิน 2 หน้า search
-        final int MAX_POSTS = 20;       // รวมแล้วไม่เกิน 20 โพสต์
+        final int MAX_PAGES = 2;
+        final int MAX_POSTS = 20;
 
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
@@ -59,14 +56,8 @@ public class PantipScraperService {
 
             while (true) {
 
-                if (page > MAX_PAGES) {
-                    System.out.println(" ครบจำนวนหน้าที่กำหนด MAX_PAGES แล้ว หยุดดึงเพิ่ม");
-                    break;
-                }
-                if (tempPosts.size() >= MAX_POSTS) {
-                    System.out.println("ครบจำนวนโพสต์ MAX_POSTS แล้ว หยุดดึงเพิ่ม");
-                    break;
-                }
+                if (page > MAX_PAGES) break;
+                if (tempPosts.size() >= MAX_POSTS) break;
 
                 String searchUrl =
                         "https://pantip.com/search?q=" +
@@ -77,16 +68,11 @@ public class PantipScraperService {
                 driver.get(searchUrl);
 
                 WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
-                List<WebElement> titleElements = wait.until(
-                        ExpectedConditions.presenceOfAllElementsLocatedBy(TITLE_SELECTOR)
-                );
+                List<WebElement> titleElements =
+                        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(TITLE_SELECTOR));
 
-                if (titleElements == null || titleElements.isEmpty()) {
-                    System.out.println("ไม่พบผลลัพธ์ในหน้า page " + page + " จบการค้นหา");
-                    break;
-                }
+                if (titleElements == null || titleElements.isEmpty()) break;
 
-                // เก็บ title + url
                 List<String> urls = new ArrayList<>();
                 List<String> titles = new ArrayList<>();
 
@@ -97,17 +83,12 @@ public class PantipScraperService {
                         String title = el.getText().trim();
                         String url = el.getAttribute("href");
 
-                        if (title == null || url == null || title.isBlank() || url.isBlank()) {
-                            System.out.println("️ ข้ามผลลัพธ์หนึ่งรายการ เพราะ title/url ว่าง");
-                            continue;
-                        }
+                        if (title == null || url == null || title.isBlank() || url.isBlank()) continue;
 
                         titles.add(title);
                         urls.add(url);
 
-                    } catch (Exception ex) {
-                        System.out.println("ข้ามผลลัพธ์หนึ่งรายการ เพราะอ่าน title/url ไม่ได้");
-                    }
+                    } catch (Exception ignored) {}
                 }
 
                 // เข้าไปอ่านรายละเอียดแต่ละโพสต์
@@ -118,7 +99,6 @@ public class PantipScraperService {
                     String title = titles.get(i);
 
                     try {
-                        System.out.println(" เข้าอ่านโพสต์: " + url);
                         driver.get(url);
 
                         String author = safeGetText(driver, ".display-post-name");
@@ -132,7 +112,6 @@ public class PantipScraperService {
                         post.setAuthor(author);
                         post.setContent(content);
                         post.setPostTime(postTime);
-
 
                         List<PantipComment> commentList = new ArrayList<>();
                         List<WebElement> commentEls = driver.findElements(
@@ -156,7 +135,6 @@ public class PantipScraperService {
 
                     } catch (Exception ex) {
                         System.out.println(" อ่านโพสต์ล้มเหลว: " + url);
-                        ex.printStackTrace();
                     }
                 }
 
@@ -174,7 +152,7 @@ public class PantipScraperService {
     }
 
     /* ---------------------------------------------------------
-     *  2) Save จาก TEMP → DB จริง
+     * 2) บันทึกจาก TEMP → DB จริง
      * --------------------------------------------------------- */
     public int saveTempToDB() {
 
@@ -182,16 +160,13 @@ public class PantipScraperService {
 
         for (PantipPost p : tempPosts) {
             try {
-                // ถ้าโพสต์นี้มีใน DB แล้ว → แจ้งว่าเคยวิเคราะห์ไปแล้ว
                 if (postRepo.existsByUrl(p.getUrl())) {
-                    System.out.println(" โพสต์นี้เคยถูกวิเคราะห์แล้ว: " + p.getUrl());
-                    continue;   // ข้าม ไม่ต้อง insert ซ้ำ
+                    System.out.println("โพสต์นี้มีอยู่แล้ว: " + p.getUrl());
+                    continue;
                 }
 
-                // 1) Save post
                 PantipPost savedPost = postRepo.save(p);
 
-                // 2) Save comments
                 if (p.getComments() != null) {
                     for (PantipComment c : p.getComments()) {
                         c.setPost(savedPost);  // FK
@@ -201,13 +176,8 @@ public class PantipScraperService {
 
                 savedCount++;
 
-            } catch (DataIntegrityViolationException e) {
-                // กันเคส constraint ซ้ำที่หลุดมาอีกชั้น
-                System.out.println(" บันทึกโพสต์ล้มเหลว (constraint ซ้ำ): " + p.getUrl());
-                e.printStackTrace();
             } catch (Exception e) {
-                System.out.println(" บันทึกโพสต์ล้มเหลว: " + p.getUrl());
-                e.printStackTrace();
+                System.out.println("บันทึกโพสต์ล้มเหลว: " + p.getUrl());
             }
         }
 
@@ -215,9 +185,6 @@ public class PantipScraperService {
         return savedCount;
     }
 
-    /*
-     *     Clear TEMP (ใช้ตอนกดยกเลิก)
-     *  */
     public void clearTemp() {
         tempPosts.clear();
     }
@@ -227,32 +194,34 @@ public class PantipScraperService {
     }
 
     /* ---------------------------------------------------------
-     * Helpers — ป้องกัน error
+     * ⭐⭐ 3) โหมดอัตโนมัติ (Scheduler เรียกใช้)
      * --------------------------------------------------------- */
+    // ⭐⭐ เพิ่มใหม่ (สำคัญมาก!)
+    public void scrapePantip(String keyword) {
+        System.out.println("🔎 [AUTO] ดึง Pantip ด้วยคำว่า: " + keyword);
 
-    // กัน NoSuchElement เวลา selector ไม่เจอ
+        scrapePantipTemp(keyword);   // ดึงโพสต์มาลง temp
+        int saved = saveTempToDB();  // บันทึกจริง
+
+        System.out.println("✅ [AUTO] บันทึกสำเร็จ: " + saved + " โพสต์");
+    }
+
+    /* ---------------------------------------------------------
+     * Helpers
+     * --------------------------------------------------------- */
     private String safeGetText(WebDriver driver, String selector) {
         try {
             return driver.findElement(By.cssSelector(selector)).getText().trim();
-        } catch (Exception e) {
-            return "";
-        }
+        } catch (Exception e) { return ""; }
     }
 
     private String safeChildText(WebElement parent, String selector) {
         try {
             return parent.findElement(By.cssSelector(selector)).getText().trim();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    // เมธอดหลักเก่า (ยังเว้นไว้ให้ต่อยอด)
-    public void scrapePantip(String keyword) {
-        // ถ้าจะใช้โหมด “บันทึกตรงลง DB เลย” ค่อยมาเติมเพิ่มได้
+        } catch (Exception e) { return ""; }
     }
 
     public void resetPantipData() {
-        // ใส่ logic ลบข้อมูล + reset id ที่นี่ ถ้าต้องการใช้
+        // เว้นไว้สำหรับลบข้อมูลทั้งหมด
     }
 }

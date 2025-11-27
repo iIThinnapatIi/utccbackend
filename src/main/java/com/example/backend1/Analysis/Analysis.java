@@ -1,5 +1,8 @@
 package com.example.backend1.Analysis;
 
+import com.example.backend1.Pantip.PantipComment;
+import com.example.backend1.Pantip.PantipPost;
+import com.example.backend1.Twitter.Tweet;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -66,4 +69,23 @@ public class Analysis {
      */
     @Column(name = "final_label")
     private String finalLabel;
+
+    @ManyToOne
+
+    @JoinColumn(name = "tweet_id", nullable = true)
+
+    private Tweet tweet;
+
+    @ManyToOne
+
+    @JoinColumn(name = "pantip_post_id", nullable = true)
+
+    private PantipPost pantipPost;
+
+    @ManyToOne
+
+    @JoinColumn(name = "pantip_comment_id", nullable = true)
+
+    private PantipComment pantipComment;
+
 }
