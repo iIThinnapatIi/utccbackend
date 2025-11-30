@@ -113,15 +113,17 @@ public class AnalysisController {
         String finalLabel = customKeywordService.applyCustomSentiment(text, quick.getLabel());
         String faculty = quick.getFaculty() != null ? quick.getFaculty() : "ไม่ระบุ";
 
-        return Map.of(
-                "text", text,
-                "sentimentLabel", finalLabel,
-                "modelLabel", quick.getLabel(),
-                "sentimentScore", quick.getScore(),
-                "faculty", faculty,
-                "absaRaw", null
-        );
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("text", text);
+        resp.put("sentimentLabel", finalLabel);
+        resp.put("modelLabel", quick.getLabel());
+        resp.put("sentimentScore", quick.getScore());
+        resp.put("faculty", faculty);
+        resp.put("absaRaw", null);   // ตรงนี้จะไม่พังแล้ว เพราะ HashMap รับ null ได้
+
+        return resp;
     }
+
     // ============================================================
     // ดึงทั้งหมด
     // ============================================================
@@ -287,4 +289,54 @@ public class AnalysisController {
         }
         return inserted;
     }
+
+    // ============================================================
+// ผู้ใช้แก้ "คณะ" เอง
+// ============================================================
+    @PutMapping("/faculty/update/{id}")
+    public Map<String, Object> updateFaculty(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body
+    ) {
+        String newFaculty = body.get("faculty");
+
+        return repo.findById(id)
+                .map(a -> {
+                    a.setFaculty(newFaculty);  // เซ็ตคณะใหม่ที่ผู้ใช้เลือก
+                    repo.save(a);
+
+                    Map<String, Object> res = new HashMap<>();
+                    res.put("status", "success");
+                    res.put("id", id);
+                    res.put("newFaculty", newFaculty);
+                    return res;
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> res = new HashMap<>();
+                    res.put("status", "error");
+                    res.put("message", "ID not found");
+                    res.put("id", id);
+                    return res;
+                });
+    }
+
+
+    // ============================================================
+// วิเคราะห์เฉพาะโพสต์ / คอมเมนต์ Pantip ที่ "เพิ่งเพิ่มใหม่"
+// (คือยังไม่มี record ในตาราง analysis)
+// ============================================================
+    @PostMapping("/pantip/scan-new")
+    @Transactional
+    public Map<String, Object> analyzeNewPantip() {
+
+        int newPosts    = analyzePantipPosts();      // ใช้ helper เดิม
+        int newComments = analyzePantipComments();   // ใช้ helper เดิม
+
+        return Map.of(
+                "status", "ok",
+                "newPosts", newPosts,
+                "newComments", newComments
+        );
+    }
+
 }
