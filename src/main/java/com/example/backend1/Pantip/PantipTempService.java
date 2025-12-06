@@ -3,12 +3,16 @@ package com.example.backend1.Pantip;
 import com.example.backend1.Analysis.Analysis;
 import com.example.backend1.Analysis.AnalysisRepository;
 import com.example.backend1.Analysis.OnnxSentimentService;
+import com.example.backend1.Analysis.AnalysisCustomKeyword;
+import com.example.backend1.Analysis.AnalysisCustomKeywordRepo;
+import com.example.backend1.CustomKeywords.CustomKeywordService;
+
+import com.example.backend1.Faculty.Faculty;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-
 
 @Service
 public class PantipTempService {
@@ -17,14 +21,23 @@ public class PantipTempService {
     private final OnnxSentimentService onnx;
     private final AnalysisRepository analysisRepo;
 
+    // ⭐ เพิ่มใหม่
+    private final CustomKeywordService customKeywordService;
+    private final AnalysisCustomKeywordRepo ackRepo;
+
+    // ⭐ Constructor ใหม่ (แต่คอมเมนต์เดิมไม่โดนลบ)
     public PantipTempService(
             PantipScraperService scraper,
             OnnxSentimentService onnx,
-            AnalysisRepository analysisRepo
+            AnalysisRepository analysisRepo,
+            CustomKeywordService customKeywordService,
+            AnalysisCustomKeywordRepo ackRepo
     ) {
         this.scraper = scraper;
         this.onnx = onnx;
         this.analysisRepo = analysisRepo;
+        this.customKeywordService = customKeywordService; // ⭐ เพิ่ม
+        this.ackRepo = ackRepo;                           // ⭐ เพิ่ม
     }
 
     /*
@@ -54,7 +67,7 @@ public class PantipTempService {
                 continue;
             }
 
-            // เรียก ONNX วิเคราะห์ sentiment
+            // 🔹 เรียก ONNX วิเคราะห์ sentiment + faculty
             OnnxSentimentService.SentimentResult res = onnx.analyze(text);
 
             // เตรียม entity สำหรับตาราง social_analysis
@@ -66,31 +79,56 @@ public class PantipTempService {
             row.setText(text);
             row.setPlatform("pantip");
 
-
             String createdAt = p.getPostTime();
             if (createdAt == null || createdAt.isBlank()) {
                 createdAt = LocalDateTime.now().toString();
             }
             row.setCreatedAt(createdAt);
 
+            // ⭐ เก็บชื่อคณะ + FK จากผล ONNX
+            String facName = res.getFacultyName() != null
+                    ? res.getFacultyName()
+                    : "ไม่ระบุ";
+            row.setFaculty(facName);
 
+            if (res.getFacultyId() != null) {
+                Faculty fac = new Faculty();
+                fac.setId(res.getFacultyId());
+                row.setFacultyRef(fac);
+            } else {
+                row.setFacultyRef(null);
+            }
 
-            row.setSentiment(res.getLabel());
-            row.setFinalLabel(res.getLabel());
+            // --------------- ⭐ ใช้ Custom Keywords ปรับผล ---------------
+            String finalLabel = customKeywordService.applyCustomSentiment(
+                    row.getId(),            // analysisId
+                    text,                   // text
+                    res.getLabel()          // modelSentiment
+            );
 
+            row.setSentiment(res.getLabel());   // ผลจาก AI
+            row.setFinalLabel(finalLabel);      // ผลหลังถูกแก้โดย custom keyword
+            row.setSentimentScore(res.getScore());// ⭐ ใหม่: เก็บ score จาก ONNX
+            // -------------------------------------------------------------
 
             analysisRepo.save(row);
             saved++;
+
+            // --------------- ⭐ บันทึก keyword ที่ match ลงตารางกลาง ---------------
+            List<Long> matchedKeywordIds = customKeywordService.getMatchedKeywordIds(text);
+
+            for (Long kid : matchedKeywordIds) {
+                ackRepo.save(new AnalysisCustomKeyword(row.getId(), kid));
+            }
+            // -----------------------------------------------------------------
         }
 
-
         scraper.saveTempToDB();
-
-
         scraper.clearTemp();
 
         return saved;
     }
+
 
 
     public void clearTemp() {

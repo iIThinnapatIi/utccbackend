@@ -39,6 +39,7 @@ public class PantipController {
         resp.put("status", "ok");
         return resp;
     }
+
     /*
      * 2) endpoint เดิม (ถ้ายังอยากเก็บไว้ใช้ Postman)
      * */

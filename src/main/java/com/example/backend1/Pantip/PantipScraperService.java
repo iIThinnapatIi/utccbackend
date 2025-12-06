@@ -161,7 +161,8 @@ public class PantipScraperService {
         for (PantipPost p : tempPosts) {
             try {
                 if (postRepo.existsByUrl(p.getUrl())) {
-                    System.out.println("โพสต์นี้มีอยู่แล้ว: " + p.getUrl());
+                    String url = "";
+                    System.out.println("[INFO] ข้ามโพสต์ซ้ำ: " + url);
                     continue;
                 }
 

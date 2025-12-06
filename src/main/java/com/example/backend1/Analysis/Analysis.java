@@ -1,5 +1,6 @@
 package com.example.backend1.Analysis;
 
+import com.example.backend1.Faculty.Faculty;
 import com.example.backend1.Pantip.PantipComment;
 import com.example.backend1.Pantip.PantipPost;
 import com.example.backend1.Twitter.Tweet;
@@ -87,5 +88,20 @@ public class Analysis {
     @JoinColumn(name = "pantip_comment_id", nullable = true)
 
     private PantipComment pantipComment;
+
+    // =====================================================
+    // ⭐ ใหม่: FK ไปหา table faculty (faculty_id)
+    // =====================================================
+    @ManyToOne
+    @JoinColumn(name = "faculty_id", nullable = true)
+    private Faculty facultyRef;
+
+    /**
+     * ความมั่นใจของโมเดล (probability 0–1)
+     * แมปกับคอลัมน์ sentiment_score
+     */
+    @Column(name = "sentiment_score")
+    private Double sentimentScore;
+
 
 }

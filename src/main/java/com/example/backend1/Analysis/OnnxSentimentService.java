@@ -5,7 +5,9 @@ import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtSession;
 import ai.onnxruntime.OnnxTensor;
-import ai.onnxruntime.OrtException;
+
+import com.example.backend1.Faculty.Faculty;
+import com.example.backend1.Faculty.FacultyService;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
@@ -16,11 +18,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
 public class OnnxSentimentService {
+
+    private final FacultyService facultyService;   // ⭐ ดึงคณะจาก DB
 
     private OrtEnvironment env;
     private OrtSession session;
@@ -29,70 +32,8 @@ public class OnnxSentimentService {
     // WangchanBERTa-finetuned-sentiment: 0=neg, 1=neu, 2=pos
     private final String[] id2label = {"negative", "neutral", "positive"};
 
-    // ========================= Faculty Rules =========================
-// แมปคำที่มักโผล่ในโพสต์ → ชื่อคณะสำหรับแสดงผล
-    private static final Map<String, String> FACULTY_KEYWORDS = Map.ofEntries(
-            // บริหารธุรกิจ
-            Map.entry("บริหารธุรกิจ", "คณะบริหารธุรกิจ"),
-            Map.entry("บริหาร",      "คณะบริหารธุรกิจ"),
-            Map.entry("การตลาด",     "คณะบริหารธุรกิจ"),
-            Map.entry("การจัดการ",   "คณะบริหารธุรกิจ"),
-            Map.entry("การเงิน",     "คณะบริหารธุรกิจ"),
-
-            // บัญชี
-            Map.entry("บัญชี",       "คณะบัญชี"),
-
-            // นิเทศศาสตร์
-            Map.entry("นิเทศศาสตร์",   "คณะนิเทศศาสตร์"),
-            Map.entry("นิเทศ",         "คณะนิเทศศาสตร์"),
-            Map.entry("สื่อสารการตลาด","คณะนิเทศศาสตร์"),
-            Map.entry("มีเดีย",        "คณะนิเทศศาสตร์"),
-
-            // เศรษฐศาสตร์
-            Map.entry("เศรษฐศาสตร์", "คณะเศรษฐศาสตร์"),
-            Map.entry("เศรษฐ",       "คณะเศรษฐศาสตร์"),
-
-            // โลจิสติกส์และซัพพลายเชน
-            Map.entry("โลจิสติกส์",      "คณะโลจิสติกส์และซัพพลายเชน"),
-            Map.entry("โลจิส",           "คณะโลจิสติกส์และซัพพลายเชน"),
-            Map.entry("ซัพพลายเชน",      "คณะโลจิสติกส์และซัพพลายเชน"),
-
-            // การท่องเที่ยวและบริการ
-            Map.entry("การท่องเที่ยว",   "คณะการท่องเที่ยวและบริการ"),
-            Map.entry("ท่องเที่ยว",      "คณะการท่องเที่ยวและบริการ"),
-            Map.entry("การโรงแรม",      "คณะการท่องเที่ยวและบริการ"),
-            Map.entry("โรงแรม",         "คณะการท่องเที่ยวและบริการ"),
-
-            // มนุษยศาสตร์
-            Map.entry("มนุษยศาสตร์",   "คณะมนุษยศาสตร์"),
-            Map.entry("มนุษย์",        "คณะมนุษยศาสตร์"),
-
-            // นิติศาสตร์
-            Map.entry("นิติศาสตร์",    "คณะนิติศาสตร์"),
-            Map.entry("กฎหมาย",        "คณะนิติศาสตร์"),
-
-            // วิทยาศาสตร์และเทคโนโลยี
-            Map.entry("วิทยาศาสตร์",  "คณะวิทยาศาสตร์และเทคโนโลยี"),
-            Map.entry("เทคโนโลยี",    "คณะวิทยาศาสตร์และเทคโนโลยี"),
-            Map.entry("ไอที",         "คณะวิทยาศาสตร์และเทคโนโลยี"),
-            Map.entry("คอมพิวเตอร์",  "คณะวิทยาศาสตร์และเทคโนโลยี")
-    );
-
-
-    /**
-     * ตรวจจับคณะจากข้อความยาว ๆ 1 ชิ้น
-     * ถ้าไม่เจอจะคืน null
-     */
-    private String detectFaculty(String text) {
-        if (text == null) return null;
-        String lower = text.toLowerCase(Locale.ROOT);
-
-        for (var e : FACULTY_KEYWORDS.entrySet()) {
-            if (lower.contains(e.getKey().toLowerCase(Locale.ROOT))) {
-                return e.getValue();
-            }
-        }
-        return null;
+    public OnnxSentimentService(FacultyService facultyService) {
+        this.facultyService = facultyService;
     }
 
     @PostConstruct
@@ -153,9 +94,15 @@ public class OnnxSentimentService {
                     out.setLabel(id2label[best]);
                     out.setScore(probs[best]);
 
-                    // ตรวจจับคณะจากข้อความ แล้วใส่เข้าไปในผลลัพธ์
-                    String faculty = detectFaculty(text);
-                    out.setFaculty(faculty);
+                    // ⭐ ใช้ FacultyService (ดึงจากฐานข้อมูล)
+                    Faculty f = facultyService.detectFaculty(text);
+                    if (f != null) {
+                        out.setFacultyName(f.getName());
+                        out.setFacultyId(f.getId());
+                    } else {
+                        out.setFacultyName(null);
+                        out.setFacultyId(null);
+                    }
 
                     return out;
                 }
@@ -201,7 +148,10 @@ public class OnnxSentimentService {
     public static class SentimentResult {
         private String label;
         private double score;
-        private String faculty;   // คณะที่ตรวจเจอ (ถ้าเจอ)
+
+        // ⭐ อัปเดต: เก็บทั้ง id และชื่อของคณะ
+        private Long facultyId;
+        private String facultyName;
 
         public String getLabel() {
             return label;
@@ -217,11 +167,27 @@ public class OnnxSentimentService {
             this.score = score;
         }
 
+        public Long getFacultyId() {
+            return facultyId;
+        }
+        public void setFacultyId(Long facultyId) {
+            this.facultyId = facultyId;
+        }
+
+        public String getFacultyName() {
+            return facultyName;
+        }
+        public void setFacultyName(String facultyName) {
+            this.facultyName = facultyName;
+        }
+
+        // ✅ backward compatible: ถ้าที่อื่นยังเรียก getFaculty()/setFaculty()
+        // ให้ผูกกับ facultyName แทน
         public String getFaculty() {
-            return faculty;
+            return facultyName;
         }
         public void setFaculty(String faculty) {
-            this.faculty = faculty;
+            this.facultyName = faculty;
         }
     }
 }

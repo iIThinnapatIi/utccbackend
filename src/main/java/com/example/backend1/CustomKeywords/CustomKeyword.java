@@ -17,6 +17,9 @@ public class CustomKeyword {
     private String keyword;
     private String sentiment;
 
+    // ⭐ ผูกกับ user.id (ใครเป็นคนสร้าง/แก้)
+    private Integer userId;
+
     public Long getId() {
         return id;
     }
@@ -39,5 +42,13 @@ public class CustomKeyword {
 
     public void setSentiment(String sentiment) {
         this.sentiment = sentiment;
+    }
+
+    public Integer getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Integer userId) {
+        this.userId = userId;
     }
 }

@@ -13,7 +13,7 @@ public class AnalysisScheduler {
     }
 
     // วิเคราะห์โพสใหม่ทุกวันหลังดึงเสร็จ
-    @Scheduled(cron = "5 0 0 * * *", zone = "Asia/Bangkok")
+    @Scheduled(cron = "5 * * * * *", zone = "Asia/Bangkok")
     public void autoAnalyzePantip() {
         controller.analyzeNewPantip();
     }

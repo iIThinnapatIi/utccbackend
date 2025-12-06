@@ -1,20 +1,3 @@
-{
-  "additional_special_tokens": [
-    "<s>NOTUSED",
-    "</s>NOTUSED",
-    "<_>"
-  ],
-  "bos_token": "<s>",
-  "cls_token": "<s>",
-  "eos_token": "</s>",
-  "mask_token": {
-    "content": "<mask>",
-    "lstrip": true,
-    "normalized": false,
-    "rstrip": false,
-    "single_word": false
-  },
-  "pad_token": "<pad>",
-  "sep_token": "</s>",
-  "unk_token": "<unk>"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:138323120958dd81383b08dc9ee7f7e7e86f3bf45d253913d6f2bb5daca6ae11
+size 385
