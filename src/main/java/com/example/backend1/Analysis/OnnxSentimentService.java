@@ -44,29 +44,20 @@ public class OnnxSentimentService {
         try {
             env = OrtEnvironment.getEnvironment();
 
-            // 👇❗ แก้ path ให้ตรงกับโครงไฟล์จริง
-            Path modelPath = extractResource(
-                    "/wangchan/model_out/model.onnx",   // เดิม /wangchan/model.onnx
-                    "wangchan_model",
-                    ".onnx"
-            );
+            Path modelPath = extractResource("/wangchan/model.onnx", "wangchan_model", ".onnx");
             long modelSize = Files.size(modelPath);
             System.out.println("Loaded model temp file = " + modelPath + " size=" + modelSize + " bytes");
 
             session = env.createSession(modelPath.toString(), new OrtSession.SessionOptions());
 
-            Path tokPath = extractResource(
-                    "/wangchan/tokenizer.json",
-                    "wangchan_tok",
-                    ".json"
-            );
+            Path tokPath = extractResource("/wangchan/tokenizer.json", "wangchan_tok", ".json");
             long tokSize = Files.size(tokPath);
             System.out.println("Loaded tokenizer temp file = " + tokPath + " size=" + tokSize + " bytes");
 
             tokenizer = HuggingFaceTokenizer.newInstance(tokPath);
 
             modelLoaded = true;
-            System.out.println("✅ ONNX model loaded OK!");
+            System.out.println("ONNX model loaded OK!");
 
         } catch (Exception e) {
             // ❗ สำคัญ: ห้ามทำให้แอปล้ม ให้แค่เตือนแล้วใช้ fallback แทน
@@ -86,7 +77,6 @@ public class OnnxSentimentService {
     public SentimentResult analyze(String text) {
         // ถ้าโมเดลไม่พร้อม → ใช้ fallback ทันที (neutral + faculty จาก FacultyService)
         if (!modelLoaded || env == null || session == null || tokenizer == null) {
-            System.err.println("[INFO] analyze() using fallback sentiment (model not loaded)");
             return fallbackResult(text, "[ONNX] Model not loaded, using fallback");
         }
 
@@ -159,6 +149,7 @@ public class OnnxSentimentService {
             System.err.println("[WARN] Faculty detection failed in fallback: " + e.getMessage());
         }
 
+        // ถ้าอยากเก็บ reason ไว้ debug ก็ใส่เพิ่มใน log ข้างบนพอ
         return out;
     }
 
@@ -202,21 +193,41 @@ public class OnnxSentimentService {
         private Long facultyId;
         private String facultyName;
 
-        public String getLabel() { return label; }
-        public void setLabel(String label) { this.label = label; }
+        public String getLabel() {
+            return label;
+        }
+        public void setLabel(String label) {
+            this.label = label;
+        }
 
-        public double getScore() { return score; }
-        public void setScore(double score) { this.score = score; }
+        public double getScore() {
+            return score;
+        }
+        public void setScore(double score) {
+            this.score = score;
+        }
 
-        public Long getFacultyId() { return facultyId; }
-        public void setFacultyId(Long facultyId) { this.facultyId = facultyId; }
+        public Long getFacultyId() {
+            return facultyId;
+        }
+        public void setFacultyId(Long facultyId) {
+            this.facultyId = facultyId;
+        }
 
-        public String getFacultyName() { return facultyName; }
-        public void setFacultyName(String facultyName) { this.facultyName = facultyName; }
+        public String getFacultyName() {
+            return facultyName;
+        }
+        public void setFacultyName(String facultyName) {
+            this.facultyName = facultyName;
+        }
 
         // ✅ backward compatible: ถ้าที่อื่นยังเรียก getFaculty()/setFaculty()
         // ให้ผูกกับ facultyName แทน
-        public String getFaculty() { return facultyName; }
-        public void setFaculty(String faculty) { this.facultyName = faculty; }
+        public String getFaculty() {
+            return facultyName;
+        }
+        public void setFaculty(String faculty) {
+            this.facultyName = faculty;
+        }
     }
 }

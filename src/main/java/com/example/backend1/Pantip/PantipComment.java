@@ -11,8 +11,9 @@ public class PantipComment {
     private Long id;
 
     @Lob
-    @Column(columnDefinition = "TEXT")   // <-- เดิม LONGTEXT
+    @Column(columnDefinition = "LONGTEXT")
     private String text;
+
 
     private String author;
 
