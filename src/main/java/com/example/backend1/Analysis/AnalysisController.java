@@ -50,7 +50,9 @@ public class AnalysisController {
         this.evalRepo = evalRepo;
     }
 
+    // ---------------------------------------------------------------
     // helper: เซฟความสัมพันธ์ analysis ↔ custom_keywords
+    // ---------------------------------------------------------------
     private void saveCustomKeywordLinks(Analysis a, String text) {
         if (text == null || text.isBlank()) return;
 
@@ -61,7 +63,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // Model Evaluation
+    // 1) Model Evaluation
     // ============================================================
     @GetMapping("/eval")
     public Map<String, Object> evaluateModel() {
@@ -82,9 +84,16 @@ public class AnalysisController {
         Map<String, Integer> fn = new HashMap<>();
 
         for (EvaluationSample s : samples) {
-            String gold = s.getTrueLabel().toLowerCase().trim();   // label ของคน
+            String gold = Optional.ofNullable(s.getTrueLabel())
+                    .orElse("neutral")
+                    .toLowerCase()
+                    .trim();
+
             OnnxSentimentService.SentimentResult res = onnx.analyze(s.getText());
-            String pred = res.getLabel().toLowerCase().trim();     // label ของโมเดล
+            String pred = Optional.ofNullable(res.getLabel())
+                    .orElse("neutral")
+                    .toLowerCase()
+                    .trim();
 
             if (gold.equals(pred)) {
                 correct++;
@@ -103,9 +112,9 @@ public class AnalysisController {
             int fpL = fp.getOrDefault(label, 0);
             int fnL = fn.getOrDefault(label, 0);
 
-            double precision = tpL + fpL == 0 ? 0.0 : (double) tpL / (tpL + fpL);
-            double recall    = tpL + fnL == 0 ? 0.0 : (double) tpL / (tpL + fnL);
-            double f1        = (precision + recall) == 0 ? 0.0 : 2 * precision * recall / (precision + recall);
+            double precision = (tpL + fpL == 0) ? 0.0 : (double) tpL / (tpL + fpL);
+            double recall    = (tpL + fnL == 0) ? 0.0 : (double) tpL / (tpL + fnL);
+            double f1        = (precision + recall == 0) ? 0.0 : 2 * precision * recall / (precision + recall);
 
             Map<String, Double> m = new HashMap<>();
             m.put("precision", precision);
@@ -125,7 +134,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // SUMMARY
+    // 2) SUMMARY  (ไม่ใช้ query พิเศษ, คำนวณเองทั้งหมด)
     // ============================================================
     @GetMapping("/summary")
     public Map<String, Object> getSummary() {
@@ -133,6 +142,7 @@ public class AnalysisController {
         List<Analysis> rows = repo.findAll();
         long pos = 0, neu = 0, neg = 0;
 
+        // นับ sentiment
         for (Analysis a : rows) {
             String s = (a.getFinalLabel() == null || a.getFinalLabel().isBlank())
                     ? a.getSentiment()
@@ -142,7 +152,7 @@ public class AnalysisController {
 
             switch (s.toLowerCase()) {
                 case "positive" -> pos++;
-                case "neutral" -> neu++;
+                case "neutral"  -> neu++;
                 case "negative" -> neg++;
             }
         }
@@ -159,12 +169,13 @@ public class AnalysisController {
                 Map.of("label", "Negative", "value", neg)
         );
 
-        Map<String, Long> byDate = new LinkedHashMap<>();
+        // trend รายวัน
+        Map<String, Long> byDate = new TreeMap<>();
         for (Analysis a : rows) {
             String created = a.getCreatedAt();
             if (created == null || created.isBlank()) continue;
 
-            created = created.substring(0, Math.min(10, created.length()));
+            created = created.substring(0, Math.min(10, created.length())); // แค่ yyyy-MM-dd
             byDate.put(created, byDate.getOrDefault(created, 0L) + 1);
         }
 
@@ -173,17 +184,25 @@ public class AnalysisController {
             trend.add(Map.of("date", e.getKey(), "count", e.getValue()));
         }
 
-        List<Object[]> facRows = repo.getFacultySummary();
-        List<Map<String, Object>> topFaculties = new ArrayList<>();
-        for (Object[] r : facRows) {
-            String facName = (r[0] == null) ? "ไม่ระบุ" : (String) r[0];
-            Long count = (r[1] == null) ? 0L : ((Number) r[1]).longValue();
-
-            Map<String, Object> m = new HashMap<>();
-            m.put("name", facName);
-            m.put("count", count);
-            topFaculties.add(m);
+        // topFaculties – นับเองจาก a.getFaculty()
+        Map<String, Long> facCounter = new HashMap<>();
+        for (Analysis a : rows) {
+            String facName = (a.getFaculty() == null || a.getFaculty().isBlank())
+                    ? "ไม่ระบุ"
+                    : a.getFaculty();
+            facCounter.put(facName, facCounter.getOrDefault(facName, 0L) + 1);
         }
+
+        // แปลงเป็น list แล้ว sort จากมากไปน้อย
+        List<Map<String, Object>> topFaculties = new ArrayList<>();
+        facCounter.entrySet().stream()
+                .sorted((e1, e2) -> Long.compare(e2.getValue(), e1.getValue()))
+                .forEach(e -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("name", e.getKey());
+                    m.put("count", e.getValue());
+                    topFaculties.add(m);
+                });
 
         return Map.of(
                 "totals", totals,
@@ -194,20 +213,29 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // วิเคราะห์ข้อความเดียว
+    // 3) วิเคราะห์ข้อความเดียว
     // ============================================================
     @PostMapping("/text")
     public Map<String, Object> analyzeSingle(@RequestBody Map<String, String> body) {
-        String text = body.get("text");
+        String text = body.getOrDefault("text", "");
 
         var quick = onnx.analyze(text);
-        String finalLabel = customKeywordService.applyCustomSentiment(text, quick.getLabel());
-        String faculty = quick.getFaculty() != null ? quick.getFaculty() : "ไม่ระบุ";
+        String baseLabel = Optional.ofNullable(quick.getLabel()).orElse("neutral");
+
+        String finalLabel;
+        try {
+            finalLabel = customKeywordService.applyCustomSentiment(text, baseLabel);
+        } catch (Exception ex) {
+            // กัน error ไม่ให้ 500
+            finalLabel = baseLabel;
+        }
+
+        String faculty = Optional.ofNullable(quick.getFaculty()).orElse("ไม่ระบุ");
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("text", text);
         resp.put("sentimentLabel", finalLabel);
-        resp.put("modelLabel", quick.getLabel());
+        resp.put("modelLabel", baseLabel);
         resp.put("sentimentScore", quick.getScore());
         resp.put("faculty", faculty);
         resp.put("absaRaw", null);
@@ -216,17 +244,27 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // ดึงทั้งหมด
+    // 4) ดึงทั้งหมด (ใช้บนหน้า Trends)
     // ============================================================
     @GetMapping
     public List<Map<String, Object>> getAnalysis() {
         List<Analysis> rows = repo.findAll();
 
-        return rows.stream().map(r -> {
-            String finalLabel = customKeywordService.applyCustomSentiment(
-                    r.getText(),
-                    r.getSentiment()
-            );
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Analysis r : rows) {
+            String baseLabel = Optional.ofNullable(r.getSentiment()).orElse("neutral");
+
+            String finalLabel;
+            try {
+                finalLabel = customKeywordService.applyCustomSentiment(
+                        r.getText(),
+                        baseLabel
+                );
+            } catch (Exception ex) {
+                // กันไม่ให้ error กลายเป็น 500
+                finalLabel = baseLabel;
+            }
 
             Map<String, Object> m = new HashMap<>();
             m.put("id", r.getId());
@@ -239,29 +277,32 @@ public class AnalysisController {
             m.put("source", r.getPlatform());
             m.put("finalLabel", finalLabel);
 
-            return m;
-        }).toList();
+            result.add(m);
+        }
+
+        return result;
     }
 
     // ============================================================
-    // Tweet dates
+    // 5) Tweet dates
     // ============================================================
     @GetMapping("/tweet-dates")
     public List<String> getTweetDates() {
         return repo.findAll().stream()
                 .map(Analysis::getCreatedAt)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
     // ============================================================
-    // ผู้ใช้แก้ sentiment
+    // 6) ผู้ใช้แก้ sentiment
     // ============================================================
     @PutMapping("/sentiment/update/{id}")
     public Map<String, String> updateSentiment(
             @PathVariable String id,
             @RequestBody Map<String, String> body
     ) {
-        String newSentiment = body.get("sentiment");
+        String newSentiment = body.getOrDefault("sentiment", "neutral");
 
         return repo.findById(id)
                 .map(a -> {
@@ -282,7 +323,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // Batch rebuild ALL
+    // 7) Batch rebuild ALL
     // ============================================================
     @PostMapping("/batch/rebuild")
     @Transactional
@@ -310,7 +351,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // Helper — Tweet
+    // 8) Helper — Tweet
     // ============================================================
     private int analyzeTweets() {
         int inserted = 0;
@@ -321,15 +362,19 @@ public class AnalysisController {
             if (repo.existsById(id) || t.getText() == null || t.getText().isBlank()) continue;
 
             var quick = onnx.analyze(t.getText());
+            String baseLabel = Optional.ofNullable(quick.getLabel()).orElse("neutral");
 
-            String finalLabel = customKeywordService.applyCustomSentiment(
-                    t.getText(),
-                    quick.getLabel()
-            );
+            String finalLabel;
+            try {
+                finalLabel = customKeywordService.applyCustomSentiment(
+                        t.getText(),
+                        baseLabel
+                );
+            } catch (Exception ex) {
+                finalLabel = baseLabel;
+            }
 
-            String facName = quick.getFacultyName() != null
-                    ? quick.getFacultyName()
-                    : "ไม่ระบุ";
+            String facName = Optional.ofNullable(quick.getFacultyName()).orElse("ไม่ระบุ");
 
             Analysis a = new Analysis();
             a.setId(id);
@@ -337,7 +382,6 @@ public class AnalysisController {
             a.setText(t.getText());
             a.setCreatedAt(t.getCreatedAt());
             a.setPlatform("twitter");
-
             a.setFaculty(facName);
             a.setSentimentScore(quick.getScore());
 
@@ -361,7 +405,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // Helper — Pantip Post
+    // 9) Helper — Pantip Post
     // ============================================================
     private int analyzePantipPosts() {
         int inserted = 0;
@@ -372,15 +416,19 @@ public class AnalysisController {
             if (repo.existsById(id) || p.getContent() == null || p.getContent().isBlank()) continue;
 
             var quick = onnx.analyze(p.getContent());
+            String baseLabel = Optional.ofNullable(quick.getLabel()).orElse("neutral");
 
-            String finalLabel = customKeywordService.applyCustomSentiment(
-                    p.getContent(),
-                    quick.getLabel()
-            );
+            String finalLabel;
+            try {
+                finalLabel = customKeywordService.applyCustomSentiment(
+                        p.getContent(),
+                        baseLabel
+                );
+            } catch (Exception ex) {
+                finalLabel = baseLabel;
+            }
 
-            String facName = quick.getFacultyName() != null
-                    ? quick.getFacultyName()
-                    : "ไม่ระบุ";
+            String facName = Optional.ofNullable(quick.getFacultyName()).orElse("ไม่ระบุ");
 
             Analysis a = new Analysis();
             a.setId(id);
@@ -388,7 +436,6 @@ public class AnalysisController {
             a.setText(p.getContent());
             a.setCreatedAt(p.getPostTime());
             a.setPlatform("pantip_post");
-
             a.setFaculty(facName);
             a.setSentimentScore(quick.getScore());
 
@@ -412,7 +459,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // Helper — Pantip Comment
+    // 10) Helper — Pantip Comment
     // ============================================================
     private int analyzePantipComments() {
         int inserted = 0;
@@ -423,15 +470,19 @@ public class AnalysisController {
             if (repo.existsById(id) || c.getText() == null || c.getText().isBlank()) continue;
 
             var quick = onnx.analyze(c.getText());
+            String baseLabel = Optional.ofNullable(quick.getLabel()).orElse("neutral");
 
-            String finalLabel = customKeywordService.applyCustomSentiment(
-                    c.getText(),
-                    quick.getLabel()
-            );
+            String finalLabel;
+            try {
+                finalLabel = customKeywordService.applyCustomSentiment(
+                        c.getText(),
+                        baseLabel
+                );
+            } catch (Exception ex) {
+                finalLabel = baseLabel;
+            }
 
-            String facName = quick.getFacultyName() != null
-                    ? quick.getFacultyName()
-                    : "ไม่ระบุ";
+            String facName = Optional.ofNullable(quick.getFacultyName()).orElse("ไม่ระบุ");
 
             Analysis a = new Analysis();
             a.setId(id);
@@ -439,7 +490,6 @@ public class AnalysisController {
             a.setText(c.getText());
             a.setCreatedAt(c.getCommentedAt());
             a.setPlatform("pantip_comment");
-
             a.setFaculty(facName);
             a.setSentimentScore(quick.getScore());
 
@@ -463,14 +513,14 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // ผู้ใช้แก้ "คณะ" เอง
+    // 11) ผู้ใช้แก้ "คณะ" เอง
     // ============================================================
     @PutMapping("/faculty/update/{id}")
     public Map<String, Object> updateFaculty(
             @PathVariable String id,
             @RequestBody Map<String, String> body
     ) {
-        String newFaculty = body.get("faculty");
+        String newFaculty = body.getOrDefault("faculty", "ไม่ระบุ");
 
         return repo.findById(id)
                 .map(a -> {
@@ -493,17 +543,23 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // ค้นหาตาม id
+    // 12) ค้นหา / explain ตาม id
     // ============================================================
     @GetMapping("/{id}")
     public Map<String, Object> getAnalysisById(@PathVariable String id) {
 
         return repo.findById(id)
                 .map(r -> {
-                    String finalLabel = customKeywordService.applyCustomSentiment(
-                            r.getText(),
-                            r.getSentiment()
-                    );
+                    String baseLabel = Optional.ofNullable(r.getSentiment()).orElse("neutral");
+                    String finalLabel;
+                    try {
+                        finalLabel = customKeywordService.applyCustomSentiment(
+                                r.getText(),
+                                baseLabel
+                        );
+                    } catch (Exception ex) {
+                        finalLabel = baseLabel;
+                    }
 
                     Map<String, Object> res = new HashMap<>();
                     res.put("id", r.getId());
@@ -522,18 +578,21 @@ public class AnalysisController {
                 ));
     }
 
-    // ============================================================
-    // Explainability
-    // ============================================================
     @GetMapping("/{id}/explain")
     public Map<String, Object> explain(@PathVariable String id) {
 
         return repo.findById(id)
                 .map(a -> {
-                    String finalLabel = customKeywordService.applyCustomSentiment(
-                            a.getText(),
-                            a.getSentiment()
-                    );
+                    String baseLabel = Optional.ofNullable(a.getSentiment()).orElse("neutral");
+                    String finalLabel;
+                    try {
+                        finalLabel = customKeywordService.applyCustomSentiment(
+                                a.getText(),
+                                baseLabel
+                        );
+                    } catch (Exception ex) {
+                        finalLabel = baseLabel;
+                    }
 
                     var matched = customKeywordService.getMatchedKeywords(a.getText());
 
@@ -565,7 +624,7 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // วิเคราะห์เฉพาะ Pantip ที่เพิ่งเพิ่มใหม่
+    // 13) วิเคราะห์เฉพาะ Pantip ที่เพิ่งเพิ่มใหม่
     // ============================================================
     @PostMapping("/pantip/scan-new")
     @Transactional
