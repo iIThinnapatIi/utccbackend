@@ -29,6 +29,9 @@ public class OnnxSentimentService {
     private OrtSession session;
     private HuggingFaceTokenizer tokenizer;
 
+    // ใช้เช็คว่าโหลดโมเดลสำเร็จไหม
+    private boolean modelLoaded = false;
+
     // WangchanBERTa-finetuned-sentiment: 0=neg, 1=neu, 2=pos
     private final String[] id2label = {"negative", "neutral", "positive"};
 
@@ -53,15 +56,30 @@ public class OnnxSentimentService {
 
             tokenizer = HuggingFaceTokenizer.newInstance(tokPath);
 
+            modelLoaded = true;
             System.out.println("ONNX model loaded OK!");
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to init ONNX model", e);
+            // ❗ สำคัญ: ห้ามทำให้แอปล้ม ให้แค่เตือนแล้วใช้ fallback แทน
+            modelLoaded = false;
+            session = null;
+            tokenizer = null;
+            env = null;
+
+            System.err.println(
+                    "[WARN] ONNX model was NOT loaded. " +
+                            "Sentiment will use fallback (neutral). Reason: " + e.getMessage()
+            );
         }
     }
 
     /** วิเคราะห์ข้อความ 1 ชิ้น */
     public SentimentResult analyze(String text) {
+        // ถ้าโมเดลไม่พร้อม → ใช้ fallback ทันที (neutral + faculty จาก FacultyService)
+        if (!modelLoaded || env == null || session == null || tokenizer == null) {
+            return fallbackResult(text, "[ONNX] Model not loaded, using fallback");
+        }
+
         try {
             // 1) tokenize ด้วย HuggingFace tokenizer
             Encoding enc = tokenizer.encode(text);
@@ -109,8 +127,30 @@ public class OnnxSentimentService {
             }
 
         } catch (Exception e) {
-            throw new RuntimeException("ONNX sentiment inference failed", e);
+            // ถ้าวิเคราะห์ไม่สำเร็จ → ไม่ให้แอปล้ม ใช้ fallback แทน
+            System.err.println("[WARN] ONNX sentiment inference failed, using fallback. Reason: " + e.getMessage());
+            return fallbackResult(text, "ONNX inference failed");
         }
+    }
+
+    /** สร้างผลลัพธ์แบบ fallback (neutral + faculty ถ้ามี) */
+    private SentimentResult fallbackResult(String text, String reason) {
+        SentimentResult out = new SentimentResult();
+        out.setLabel("neutral");
+        out.setScore(0.0);
+
+        try {
+            Faculty f = facultyService.detectFaculty(text);
+            if (f != null) {
+                out.setFacultyName(f.getName());
+                out.setFacultyId(f.getId());
+            }
+        } catch (Exception e) {
+            System.err.println("[WARN] Faculty detection failed in fallback: " + e.getMessage());
+        }
+
+        // ถ้าอยากเก็บ reason ไว้ debug ก็ใส่เพิ่มใน log ข้างบนพอ
+        return out;
     }
 
     /** softmax ธรรมดา */

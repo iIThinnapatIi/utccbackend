@@ -17,16 +17,15 @@ public class PantipPost {
     @Column(length = 500)
     private String url;
 
-
+    // สำหรับ PostgreSQL ใช้ TEXT แทน LONGTEXT
     @Lob
-    @Column(columnDefinition = "LONGTEXT")
+    @Column(columnDefinition = "TEXT")
     private String preview;
 
     private String author;
 
-
     @Lob
-    @Column(columnDefinition = "LONGTEXT")
+    @Column(columnDefinition = "TEXT")
     private String content;
 
     private String postTime;
