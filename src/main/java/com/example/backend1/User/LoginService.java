@@ -2,6 +2,8 @@ package com.example.backend1.User;
 
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class LoginService {
 
@@ -12,20 +14,18 @@ public class LoginService {
     }
 
     /**
-     * ✔ ใช้เมธอดเดิมของ Loginrepository: findByUsernameAndPassword
-     * ✔ กัน username / password เป็น null เพื่อป้องกัน error
-     * ✔ ถ้าไม่เจอ user หรือ password ไม่ตรง → คืน false (ไม่ error 500)
+     * ตรวจสอบว่า username / password ที่ส่งมา
+     * มี record ใน DB อย่างน้อย 1 แถวหรือไม่
      */
     public boolean authenticate(String username, String password) {
 
-        // ⭐ กันเคส frontend ส่ง null → ป้องกัน NullPointerException
+        // กัน null จากฝั่งหน้าเว็บ
         if (username == null || password == null) {
             return false;
         }
 
-        // ⭐ ถ้ามี row ใน DB ที่ username + password ตรงกัน → login สำเร็จ
-        return repository
-                .findByUsernameAndPassword(username, password)
-                .isPresent();
+        // ถ้ามีอย่างน้อย 1 แถว → login ผ่าน
+        List<login> users = repository.findByUsernameAndPassword(username, password);
+        return !users.isEmpty();
     }
 }

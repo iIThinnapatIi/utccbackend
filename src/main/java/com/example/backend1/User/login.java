@@ -3,11 +3,12 @@ package com.example.backend1.User;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "app_user")   // ชี้ไปที่ app_user
+@Table(name = "app_user")   // ✅ ผูกกับตาราง app_user
 public class login {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private int id;
 
     @Column(name = "username")
@@ -16,13 +17,16 @@ public class login {
     @Column(name = "password")
     private String password;
 
-    public login() {}
+    public login() {
+        // default constructor
+    }
 
     public login(String username, String password) {
         this.username = username;
         this.password = password;
     }
 
+    // -------- getter / setter --------
     public int getId() {
         return id;
     }
