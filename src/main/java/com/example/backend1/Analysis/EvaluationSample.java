@@ -10,9 +10,9 @@ public class EvaluationSample {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Lob
-    @Column(name = "text", columnDefinition = "TEXT", nullable = false)
+    @Column(columnDefinition = "TEXT")
     private String text;
+
 
     @Column(name = "true_label", nullable = false)
     private String trueLabel;
