@@ -20,9 +20,9 @@ public class Analysis {
 
     /**
      * เนื้อหาข้อความจริง ๆ ที่ดึงมาจากแพลตฟอร์ม (โพสต์ยาว)
-     * ใช้ TEXT เพื่อไม่ให้ติด error Data too long for column 'text'
+     * ใช้ TEXT เพื่อรองรับข้อความยาว
+     * ✅ เอา @Lob ออกเพื่อไม่ให้ชนกับ PostgreSQL (Bad value for type long)
      */
-    @Lob
     @Column(name = "text", columnDefinition = "TEXT")
     private String text;
 
