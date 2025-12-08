@@ -10,10 +10,9 @@ public class PantipComment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Lob
-    @Column(columnDefinition = "LONGTEXT")
+    // ใช้ TEXT สำหรับข้อความยาว (PostgreSQL รองรับอัตโนมัติ)
+    @Column(columnDefinition = "TEXT")
     private String text;
-
 
     private String author;
 
@@ -23,18 +22,38 @@ public class PantipComment {
     @JoinColumn(name = "post_id")
     private PantipPost post;
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public String getText() { return text; }
-    public void setText(String text) { this.text = text; }
+    public String getText() {
+        return text;
+    }
+    public void setText(String text) {
+        this.text = text;
+    }
 
-    public String getAuthor() { return author; }
-    public void setAuthor(String author) { this.author = author; }
+    public String getAuthor() {
+        return author;
+    }
+    public void setAuthor(String author) {
+        this.author = author;
+    }
 
-    public String getCommentedAt() { return commentedAt; }
-    public void setCommentedAt(String commentedAt) { this.commentedAt = commentedAt; }
+    public String getCommentedAt() {
+        return commentedAt;
+    }
+    public void setCommentedAt(String commentedAt) {
+        this.commentedAt = commentedAt;
+    }
 
-    public PantipPost getPost() { return post; }
-    public void setPost(PantipPost post) { this.post = post; }
+    public PantipPost getPost() {
+        return post;
+    }
+    public void setPost(PantipPost post) {
+        this.post = post;
+    }
 }

@@ -17,14 +17,13 @@ public class PantipPost {
     @Column(length = 500)
     private String url;
 
-    // สำหรับ PostgreSQL ใช้ TEXT แทน LONGTEXT
-    @Lob
+    // preview เก็บข้อความยาว → ใช้ TEXT ใน DB แต่ไม่ต้องใส่ @Lob
     @Column(columnDefinition = "TEXT")
     private String preview;
 
     private String author;
 
-    @Lob
+    // content ก็เหมือนกัน → เอา @Lob ออก
     @Column(columnDefinition = "TEXT")
     private String content;
 
