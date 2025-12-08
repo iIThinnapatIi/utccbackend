@@ -4,7 +4,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface Loginrepository extends JpaRepository<login,Integer> {
+public interface Loginrepository extends JpaRepository<login, Integer> {
 
+    // ✔ ค้นหา user จาก username + password พร้อมกัน
     Optional<login> findByUsernameAndPassword(String username, String password);
 }

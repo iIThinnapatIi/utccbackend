@@ -13,17 +13,17 @@ public class LoginService {
 
     /**
      * ✔ ใช้เมธอดเดิมของ Loginrepository: findByUsernameAndPassword
-     * ✔ กัน username / password เป็น null
+     * ✔ กัน username / password เป็น null เพื่อป้องกัน error
      * ✔ ถ้าไม่เจอ user หรือ password ไม่ตรง → คืน false (ไม่ error 500)
      */
     public boolean authenticate(String username, String password) {
 
-        // กันเคสที่ frontend ส่ง null มาจะได้ไม่พัง
+        // ⭐ กันเคส frontend ส่ง null → ป้องกัน NullPointerException
         if (username == null || password == null) {
             return false;
         }
 
-        // ถ้ามี row ใน DB ที่ username + password ตรงกัน → login สำเร็จ
+        // ⭐ ถ้ามี row ใน DB ที่ username + password ตรงกัน → login สำเร็จ
         return repository
                 .findByUsernameAndPassword(username, password)
                 .isPresent();
