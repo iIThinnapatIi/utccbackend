@@ -15,11 +15,14 @@ public class CorsConfig {
             public void addCorsMappings(CorsRegistry registry) {
 
                 registry.addMapping("/**")
-                        .allowedOriginPatterns("*")   // ใช้ patterns แทน allowedOrigins
-                        .allowedMethods("*")
+                        .allowedOrigins(
+                                "https://utccsocial.netlify.app",   // เว็บไซต์จริงของเธอ
+                                "https://*.netlify.app"            // เผื่อ Netlify เปลี่ยน subdomain
+                        )
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
-                        .allowCredentials(true);
-
+                        .allowCredentials(false)
+                        .maxAge(3600); // cache preflight 1 ชม.
             }
         };
     }
