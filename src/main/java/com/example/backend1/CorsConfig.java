@@ -1,3 +1,4 @@
+// src/main/java/com/example/backend1/CorsConfig.java
 package com.example.backend1;
 
 import org.springframework.context.annotation.Bean;
@@ -16,13 +17,12 @@ public class CorsConfig {
 
                 registry.addMapping("/**")
                         .allowedOrigins(
-                                "https://utccsocial.netlify.app",   // เว็บไซต์จริงของเธอ
-                                "https://*.netlify.app"            // เผื่อ Netlify เปลี่ยน subdomain
+                                "https://utccsocial.netlify.app",
+                                "http://localhost:5173"
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(false)
-                        .maxAge(3600); // cache preflight 1 ชม.
+                        .allowedHeaders("*");
+                // ❌ ไม่ต้องใช้ allowCredentials เพราะ frontend ไม่ใช้ cookies/session
             }
         };
     }
