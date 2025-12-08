@@ -3,20 +3,20 @@ package com.example.backend1.User;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name="user")
+@Table(name = "app_user")   // ชี้ไปที่ app_user
 public class login {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name="id")
     private int id;
-    @Column(name="username")
+
+    @Column(name = "username")
     private String username;
+
     @Column(name = "password")
     private String password;
 
-    public login(){
-
-    }
+    public login() {}
 
     public login(String username, String password) {
         this.username = username;
@@ -49,11 +49,10 @@ public class login {
 
     @Override
     public String toString() {
-        return
-                "login{"+
-                        "id="+id+
-                        ", username="+username+
-                        ",password="+ password+
-                        " }";
+        return "login{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                ", password='" + password + '\'' +
+                '}';
     }
 }
