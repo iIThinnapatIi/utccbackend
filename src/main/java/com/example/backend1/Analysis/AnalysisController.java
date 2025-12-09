@@ -63,20 +63,20 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // 1) Model Evaluation
-    // ============================================================
+// 1) Model Evaluation (เวอร์ชันกัน error)
+// ============================================================
     @GetMapping("/eval")
     public Map<String, Object> evaluateModel() {
 
         List<EvaluationSample> samples = evalRepo.findAll();
-        if (samples.isEmpty()) {
+        if (samples == null || samples.isEmpty()) {
             return Map.of(
                     "status", "error",
                     "message", "ยังไม่มีข้อมูลในตาราง evaluation_samples"
             );
         }
 
-        int total = samples.size();
+        int total = 0;     // นับเฉพาะ sample ที่ใช้คำนวณจริง (มี text)
         int correct = 0;
 
         Map<String, Integer> tp = new HashMap<>();
@@ -84,16 +84,38 @@ public class AnalysisController {
         Map<String, Integer> fn = new HashMap<>();
 
         for (EvaluationSample s : samples) {
+            // ----- กัน text เป็น null / ว่าง -----
+            String text = Optional.ofNullable(s.getText())
+                    .orElse("")
+                    .trim();
+            if (text.isEmpty()) {
+                // ถ้าไม่มีข้อความ ข้ามไปเลย ไม่เอามาคิด
+                continue;
+            }
+
+            // label ที่มนุษย์ให้ (gold)
             String gold = Optional.ofNullable(s.getTrueLabel())
                     .orElse("neutral")
                     .toLowerCase()
                     .trim();
 
-            OnnxSentimentService.SentimentResult res = onnx.analyze(s.getText());
-            String pred = Optional.ofNullable(res.getLabel())
-                    .orElse("neutral")
-                    .toLowerCase()
-                    .trim();
+            String pred;
+
+            try {
+                // เรียก ONNX วิเคราะห์
+                OnnxSentimentService.SentimentResult res = onnx.analyze(text);
+                pred = Optional.ofNullable(res.getLabel())
+                        .orElse("neutral")
+                        .toLowerCase()
+                        .trim();
+            } catch (Exception ex) {
+                // ถ้า ONNX พัง (เช่น โมเดลไม่โหลด / อื่น ๆ) -> log แล้วข้ามตัวอย่างนี้
+                System.err.println("[EVAL] ONNX analyze failed for sample id="
+                        + s.getId() + " : " + ex.getMessage());
+                continue;
+            }
+
+            total++; // sample นี้ถูกนำมาคิดจริง
 
             if (gold.equals(pred)) {
                 correct++;
@@ -102,6 +124,14 @@ public class AnalysisController {
                 fp.put(pred, fp.getOrDefault(pred, 0) + 1);
                 fn.put(gold, fn.getOrDefault(gold, 0) + 1);
             }
+        }
+
+        if (total == 0) {
+            // ไม่มี sample ไหนที่ใช้คำนวณได้เลย
+            return Map.of(
+                    "status", "error",
+                    "message", "ไม่มีชุดทดสอบที่มีข้อความสำหรับประเมินโมเดล"
+            );
         }
 
         double accuracy = (double) correct / total;
@@ -114,7 +144,9 @@ public class AnalysisController {
 
             double precision = (tpL + fpL == 0) ? 0.0 : (double) tpL / (tpL + fpL);
             double recall    = (tpL + fnL == 0) ? 0.0 : (double) tpL / (tpL + fnL);
-            double f1        = (precision + recall == 0) ? 0.0 : 2 * precision * recall / (precision + recall);
+            double f1        = (precision + recall == 0)
+                    ? 0.0
+                    : 2 * precision * recall / (precision + recall);
 
             Map<String, Double> m = new HashMap<>();
             m.put("precision", precision);
