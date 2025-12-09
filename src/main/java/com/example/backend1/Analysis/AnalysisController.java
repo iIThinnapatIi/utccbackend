@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
 @RestController
-@RequestMapping("/api/analysis")
+@RequestMapping("/analysis")   // 🔁 แก้จาก /api/analysis -> /analysis ให้ตรงกับ frontend
 public class AnalysisController {
 
     private final OnnxSentimentService onnx;
