@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
 @RestController
-@RequestMapping("/api/analysis")   // ✅ ให้ตรงกับ frontend ที่ยิง /api/analysis
+@RequestMapping("/analysis")   // 🔁 แก้จาก /api/analysis -> /analysis ให้ตรงกับ frontend
 public class AnalysisController {
 
     private final OnnxSentimentService onnx;
@@ -236,7 +236,7 @@ public class AnalysisController {
         resp.put("text", text);
         resp.put("sentimentLabel", finalLabel);
         resp.put("modelLabel", baseLabel);
-        resp.put("sentimentScore", (double) quick.getScore()); // ✅ cast เป็น double
+        resp.put("sentimentScore", quick.getScore());
         resp.put("faculty", faculty);
         resp.put("absaRaw", null);
 
@@ -383,7 +383,7 @@ public class AnalysisController {
             a.setCreatedAt(t.getCreatedAt());
             a.setPlatform("twitter");
             a.setFaculty(facName);
-            a.setSentimentScore((double) quick.getScore()); // ✅ cast
+            a.setSentimentScore(quick.getScore());
 
             if (quick.getFacultyId() != null) {
                 Faculty fac = new Faculty();
@@ -437,7 +437,7 @@ public class AnalysisController {
             a.setCreatedAt(p.getPostTime());
             a.setPlatform("pantip_post");
             a.setFaculty(facName);
-            a.setSentimentScore((double) quick.getScore()); // ✅ cast
+            a.setSentimentScore(quick.getScore());
 
             if (quick.getFacultyId() != null) {
                 Faculty fac = new Faculty();
@@ -491,7 +491,7 @@ public class AnalysisController {
             a.setCreatedAt(c.getCommentedAt());
             a.setPlatform("pantip_comment");
             a.setFaculty(facName);
-            a.setSentimentScore((double) quick.getScore()); // ✅ cast
+            a.setSentimentScore(quick.getScore());
 
             if (quick.getFacultyId() != null) {
                 Faculty fac = new Faculty();
