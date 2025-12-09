@@ -108,7 +108,7 @@ public class PantipTempService {
 
             row.setSentiment(res.getLabel());   // ผลจาก AI
             row.setFinalLabel(finalLabel);      // ผลหลังถูกแก้โดย custom keyword
-            row.setSentimentScore(res.getScore());// ⭐ ใหม่: เก็บ score จาก ONNX
+            row.setSentimentScore((double) res.getScore()); // ✅ ใหม่: cast เป็น double
             // -------------------------------------------------------------
 
             analysisRepo.save(row);
@@ -128,8 +128,6 @@ public class PantipTempService {
 
         return saved;
     }
-
-
 
     public void clearTemp() {
         scraper.clearTemp();
