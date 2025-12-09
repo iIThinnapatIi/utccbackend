@@ -10,6 +10,8 @@ import com.example.backend1.Twitter.Tweet;
 import com.example.backend1.Twitter.TweetRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 
@@ -63,8 +65,8 @@ public class AnalysisController {
     }
 
     // ============================================================
-// 1) Model Evaluation (เวอร์ชันกัน error)
-// ============================================================
+    // 1) Model Evaluation (เวอร์ชันกัน error)
+    // ============================================================
     @GetMapping("/eval")
     public Map<String, Object> evaluateModel() {
 
@@ -163,6 +165,115 @@ public class AnalysisController {
         res.put("perClass", perClass);
 
         return res;
+    }
+
+    // ------------------------------------------------------------
+    // 1.1) Evaluation Samples: ดึงรายการทั้งหมดให้ผู้ใช้ดู/จัดการ
+    // ------------------------------------------------------------
+    @GetMapping("/eval/samples")
+    public List<EvaluationSample> getAllEvalSamples() {
+        return evalRepo.findAll();
+    }
+
+    // ------------------------------------------------------------
+    // 1.2) Evaluation Samples: เพิ่มตัวอย่างใหม่ (text + trueLabel)
+    //      body JSON: { "text": "...", "trueLabel": "positive|neutral|negative" }
+    // ------------------------------------------------------------
+    @PostMapping("/eval/samples")
+    public EvaluationSample createEvalSample(@RequestBody Map<String, String> body) {
+
+        String text = Optional.ofNullable(body.get("text"))
+                .orElse("")
+                .trim();
+
+        String trueLabel = Optional.ofNullable(body.get("trueLabel"))
+                .orElse("")
+                .toLowerCase()
+                .trim();
+
+        if (text.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "ต้องระบุ text"
+            );
+        }
+
+        if (!trueLabel.equals("positive") &&
+                !trueLabel.equals("neutral") &&
+                !trueLabel.equals("negative")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "trueLabel ต้องเป็น positive / neutral / negative"
+            );
+        }
+
+        EvaluationSample s = new EvaluationSample();
+        s.setText(text);
+        s.setTrueLabel(trueLabel);
+
+        return evalRepo.save(s);
+    }
+
+    // ------------------------------------------------------------
+    // 1.3) Evaluation Samples: ลบตัวอย่างตาม id
+    // ------------------------------------------------------------
+    @DeleteMapping("/eval/samples/{id}")
+    public Map<String, Object> deleteEvalSample(@PathVariable Long id) {
+        if (!evalRepo.existsById(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "ไม่พบ evaluation_sample id=" + id
+            );
+        }
+        evalRepo.deleteById(id);
+        return Map.of("status", "ok");
+    }
+
+    // ------------------------------------------------------------
+    // 1.4) Playground: ให้ผู้ใช้ลองพิมพ์ข้อความ แล้วให้ ONNX วิเคราะห์สด
+    //      POST /analysis/eval/try
+    //      body JSON: { "text": "..." }
+    // ------------------------------------------------------------
+    @PostMapping("/eval/try")
+    public Map<String, Object> tryEvaluateText(@RequestBody Map<String, String> body) {
+
+        String text = Optional.ofNullable(body.get("text"))
+                .orElse("")
+                .trim();
+
+        if (text.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "ต้องระบุ text"
+            );
+        }
+
+        try {
+            OnnxSentimentService.SentimentResult res = onnx.analyze(text);
+
+            String label = Optional.ofNullable(res.getLabel())
+                    .orElse("neutral");
+
+            Double score = null;
+            try {
+                score = res.getScore();
+            } catch (Exception ignore) {
+                // ถ้าไม่มีคะแนนในโมเดลก็ปล่อยให้เป็น null
+            }
+
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("text", text);
+            resp.put("label", label);
+            resp.put("sentimentScore", score);
+
+            return resp;
+
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "วิเคราะห์ข้อความไม่สำเร็จ: " + ex.getMessage()
+            );
+        }
     }
 
     // ============================================================
