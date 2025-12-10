@@ -36,12 +36,27 @@ public class PantipController {
         try {
             List<PantipPost> posts = tempService.fetchTemp(keyword);
             return ResponseEntity.ok(posts);
+
+        } catch (IllegalStateException ex) {
+            // กรณีพิเศษ: ปิดการใช้งาน scraping บน server นี้
+            ex.printStackTrace();
+            Map<String, Object> err = new HashMap<>();
+            err.put("message", ex.getMessage());           // ข้อความอธิบายชัด ๆ
+            err.put("type", "SCRAPE_DISABLED");            // ให้ frontend แยก case ได้
+            return ResponseEntity
+                    .status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(err);
+
         } catch (Exception e) {
+            // error ทั่วไป เช่น Selenium เปิด Chrome ไม่ได้ ฯลฯ
             e.printStackTrace();   // ดู error ใน log
             Map<String, Object> err = new HashMap<>();
             err.put("message", "ดึงข้อมูล Pantip ล้มเหลว");
             err.put("detail", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
+            err.put("type", "SCRAPE_ERROR");
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(err);
         }
     }
 
