@@ -7,7 +7,7 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +24,18 @@ public class PantipScraperService {
     private final PantipCommentRepository commentRepo;
 
     // TEMP เก็บโพสต์ชั่วคราวก่อนบันทึกจริง
-    private List<PantipPost> tempPosts = new ArrayList<>();
+    private final List<PantipPost> tempPosts = new ArrayList<>();
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    /**
+     * เปิด/ปิดความสามารถในการดึง Pantip ด้วย Selenium
+     * - ในเครื่อง dev: app.enablePantipScrape=true  (ให้ดึงได้)
+     * - บน Render:     app.enablePantipScrape=false (ปิด ไม่ให้พยายามเปิด Chrome)
+     */
+    @Value("${app.enablePantipScrape:true}")
+    private boolean enablePantipScrape;
 
     public PantipScraperService(PantipPostRepository postRepo, PantipCommentRepository commentRepo) {
         this.postRepo = postRepo;
@@ -39,19 +47,31 @@ public class PantipScraperService {
      * --------------------------------------------------------- */
     public List<PantipPost> scrapePantipTemp(String keyword) {
 
+        // ถ้า server นี้ไม่อนุญาตให้ดึง Pantip ให้แจ้งเหตุผลตรง ๆ
+        if (!enablePantipScrape) {
+            throw new IllegalStateException(
+                    "ฟังก์ชันดึงข้อมูล Pantip ถูกปิดบนเซิร์ฟเวอร์นี้ " +
+                            "(ใช้ได้เฉพาะเครื่องที่ติดตั้ง Chrome/Selenium สำหรับดึงข้อมูลเข้า DB ล่วงหน้า)"
+            );
+        }
+
         tempPosts.clear(); // ล้าง temp ก่อนใช้งานใหม่
 
         final int MAX_PAGES = 2;
         final int MAX_POSTS = 20;
 
-        WebDriverManager.chromedriver().setup();
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless=new", "--disable-gpu", "--no-sandbox");
-
-        WebDriver driver = new ChromeDriver(options);
-        By TITLE_SELECTOR = By.cssSelector(".pt-list-item__title a");
+        WebDriver driver = null;
 
         try {
+            WebDriverManager.chromedriver().setup();
+
+            ChromeOptions options = new ChromeOptions();
+            options.addArguments("--headless=new", "--disable-gpu", "--no-sandbox");
+
+            // สร้าง ChromeDriver ภายใน try เพื่อให้จับ error ได้
+            driver = new ChromeDriver(options);
+            By TITLE_SELECTOR = By.cssSelector(".pt-list-item__title a");
+
             int page = 1;
 
             while (true) {
@@ -88,7 +108,8 @@ public class PantipScraperService {
                         titles.add(title);
                         urls.add(url);
 
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
 
                 // เข้าไปอ่านรายละเอียดแต่ละโพสต์
@@ -142,10 +163,17 @@ public class PantipScraperService {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            // log ให้เห็นใน server และโยนขึ้นไปให้ Controller แปลงเป็น JSON error
+            System.err.println("[PantipScraper] scrapePantipTemp failed: " + e.getMessage());
+            throw new RuntimeException("Pantip scraping failed", e);
 
         } finally {
-            driver.quit();
+            if (driver != null) {
+                try {
+                    driver.quit();
+                } catch (Exception ignore) {
+                }
+            }
         }
 
         return tempPosts;
@@ -161,7 +189,7 @@ public class PantipScraperService {
         for (PantipPost p : tempPosts) {
             try {
                 if (postRepo.existsByUrl(p.getUrl())) {
-                    String url = "";
+                    String url = p.getUrl();
                     System.out.println("[INFO] ข้ามโพสต์ซ้ำ: " + url);
                     continue;
                 }
@@ -194,9 +222,14 @@ public class PantipScraperService {
         return tempPosts;
     }
 
-
     //  ห้ามลบห้ามลบห้ามลบScheduler
     public void scrapePantip(String keyword) {
+        // ใช้ flag เดียวกันกันไว้ ถ้า server นี้ปิด scraping ก็ไม่ต้องรัน scheduler ด้วย
+        if (!enablePantipScrape) {
+            System.out.println("[PantipScraper] skip scheduler: scraping disabled on this server.");
+            return;
+        }
+
         System.out.println(" [AUTO] ดึง Pantip ด้วยคำว่า: " + keyword);
 
         scrapePantipTemp(keyword);   // ดึงโพสต์มาลง temp
@@ -211,13 +244,17 @@ public class PantipScraperService {
     private String safeGetText(WebDriver driver, String selector) {
         try {
             return driver.findElement(By.cssSelector(selector)).getText().trim();
-        } catch (Exception e) { return ""; }
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private String safeChildText(WebElement parent, String selector) {
         try {
             return parent.findElement(By.cssSelector(selector)).getText().trim();
-        } catch (Exception e) { return ""; }
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public void resetPantipData() {
