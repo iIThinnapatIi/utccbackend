@@ -387,12 +387,11 @@ public class AnalysisController {
     }
 
     // ============================================================
-    // 4) ดึงทั้งหมด (ใช้บนหน้า Trends)
-    // ============================================================
+// 4) ดึงทั้งหมด (ใช้บนหน้า Dashboard / Mentions / Trends)
+// ============================================================
     @GetMapping
     public List<Map<String, Object>> getAnalysis() {
         List<Analysis> rows = repo.findAll();
-
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (Analysis r : rows) {
@@ -405,9 +404,24 @@ public class AnalysisController {
                         baseLabel
                 );
             } catch (Exception ex) {
-                // กันไม่ให้ error กลายเป็น 500
                 finalLabel = baseLabel;
             }
+
+            // ✅ ====== ตรงนี้คือหัวใจ ======
+            String originalUrl = null;
+
+            if ("twitter".equals(r.getPlatform()) && r.getTweet() != null) {
+                originalUrl = "https://x.com/i/web/status/" + r.getTweet().getId();
+            }
+            else if ("pantip_post".equals(r.getPlatform()) && r.getPantipPost() != null) {
+                originalUrl = r.getPantipPost().getUrl();
+            }
+            else if ("pantip_comment".equals(r.getPlatform()) && r.getPantipComment() != null) {
+                if (r.getPantipComment().getPost() != null) {
+                    originalUrl = r.getPantipComment().getPost().getUrl();
+                }
+            }
+            // ===============================
 
             Map<String, Object> m = new HashMap<>();
             m.put("id", r.getId());
@@ -420,11 +434,16 @@ public class AnalysisController {
             m.put("source", r.getPlatform());
             m.put("finalLabel", finalLabel);
 
+            // ✅ ส่งลิงก์ต้นฉบับออกไป
+            m.put("originalUrl", originalUrl);
+
             result.add(m);
         }
 
         return result;
     }
+
+
 
     // ============================================================
     // 5) Tweet dates
