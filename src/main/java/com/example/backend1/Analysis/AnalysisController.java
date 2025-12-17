@@ -29,8 +29,6 @@ public class AnalysisController {
     // ตารางกลาง analysis_custom_keyword
     private final AnalysisCustomKeywordRepo ackRepo;
 
-    // ตาราง evaluation_samples
-    private final EvaluationSampleRepo evalRepo;
 
     public AnalysisController(
             OnnxSentimentService onnx,
@@ -39,8 +37,7 @@ public class AnalysisController {
             PantipPostRepository pantipPostRepo,
             PantipCommentRepository pantipCommentRepo,
             CustomKeywordService customKeywordService,
-            AnalysisCustomKeywordRepo ackRepo,
-            EvaluationSampleRepo evalRepo
+            AnalysisCustomKeywordRepo ackRepo
     ) {
         this.onnx = onnx;
         this.repo = repo;
@@ -49,7 +46,6 @@ public class AnalysisController {
         this.pantipCommentRepo = pantipCommentRepo;
         this.customKeywordService = customKeywordService;
         this.ackRepo = ackRepo;
-        this.evalRepo = evalRepo;
     }
 
     // ---------------------------------------------------------------
@@ -67,167 +63,167 @@ public class AnalysisController {
     // ============================================================
     // 1) Model Evaluation (เวอร์ชันกัน error)
     // ============================================================
-    @GetMapping("/eval")
-    public Map<String, Object> evaluateModel() {
-
-        List<EvaluationSample> samples = evalRepo.findAll();
-        if (samples == null || samples.isEmpty()) {
-            return Map.of(
-                    "status", "error",
-                    "message", "ยังไม่มีข้อมูลในตาราง evaluation_samples"
-            );
-        }
-
-        int total = 0;     // นับเฉพาะ sample ที่ใช้คำนวณจริง (มี text)
-        int correct = 0;
-
-        Map<String, Integer> tp = new HashMap<>();
-        Map<String, Integer> fp = new HashMap<>();
-        Map<String, Integer> fn = new HashMap<>();
-
-        for (EvaluationSample s : samples) {
-            // ----- กัน text เป็น null / ว่าง -----
-            String text = Optional.ofNullable(s.getText())
-                    .orElse("")
-                    .trim();
-            if (text.isEmpty()) {
-                // ถ้าไม่มีข้อความ ข้ามไปเลย ไม่เอามาคิด
-                continue;
-            }
-
-            // label ที่มนุษย์ให้ (gold)
-            String gold = Optional.ofNullable(s.getTrueLabel())
-                    .orElse("neutral")
-                    .toLowerCase()
-                    .trim();
-
-            String pred;
-
-            try {
-                // เรียก ONNX วิเคราะห์
-                OnnxSentimentService.SentimentResult res = onnx.analyze(text);
-                pred = Optional.ofNullable(res.getLabel())
-                        .orElse("neutral")
-                        .toLowerCase()
-                        .trim();
-            } catch (Exception ex) {
-                // ถ้า ONNX พัง (เช่น โมเดลไม่โหลด / อื่น ๆ) -> log แล้วข้ามตัวอย่างนี้
-                System.err.println("[EVAL] ONNX analyze failed for sample id="
-                        + s.getId() + " : " + ex.getMessage());
-                continue;
-            }
-
-            total++; // sample นี้ถูกนำมาคิดจริง
-
-            if (gold.equals(pred)) {
-                correct++;
-                tp.put(gold, tp.getOrDefault(gold, 0) + 1);
-            } else {
-                fp.put(pred, fp.getOrDefault(pred, 0) + 1);
-                fn.put(gold, fn.getOrDefault(gold, 0) + 1);
-            }
-        }
-
-        if (total == 0) {
-            // ไม่มี sample ไหนที่ใช้คำนวณได้เลย
-            return Map.of(
-                    "status", "error",
-                    "message", "ไม่มีชุดทดสอบที่มีข้อความสำหรับประเมินโมเดล"
-            );
-        }
-
-        double accuracy = (double) correct / total;
-
-        Map<String, Map<String, Double>> perClass = new HashMap<>();
-        for (String label : List.of("positive", "neutral", "negative")) {
-            int tpL = tp.getOrDefault(label, 0);
-            int fpL = fp.getOrDefault(label, 0);
-            int fnL = fn.getOrDefault(label, 0);
-
-            double precision = (tpL + fpL == 0) ? 0.0 : (double) tpL / (tpL + fpL);
-            double recall    = (tpL + fnL == 0) ? 0.0 : (double) tpL / (tpL + fnL);
-            double f1        = (precision + recall == 0)
-                    ? 0.0
-                    : 2 * precision * recall / (precision + recall);
-
-            Map<String, Double> m = new HashMap<>();
-            m.put("precision", precision);
-            m.put("recall", recall);
-            m.put("f1", f1);
-
-            perClass.put(label, m);
-        }
-
-        Map<String, Object> res = new HashMap<>();
-        res.put("status", "ok");
-        res.put("totalSamples", total);
-        res.put("accuracy", accuracy);
-        res.put("perClass", perClass);
-
-        return res;
-    }
-
-    // ------------------------------------------------------------
-    // 1.1) Evaluation Samples: ดึงรายการทั้งหมดให้ผู้ใช้ดู/จัดการ
-    // ------------------------------------------------------------
-    @GetMapping("/eval/samples")
-    public List<EvaluationSample> getAllEvalSamples() {
-        return evalRepo.findAll();
-    }
-
-    // ------------------------------------------------------------
-    // 1.2) Evaluation Samples: เพิ่มตัวอย่างใหม่ (text + trueLabel)
-    //      body JSON: { "text": "...", "trueLabel": "positive|neutral|negative" }
-    // ------------------------------------------------------------
-    @PostMapping("/eval/samples")
-    public EvaluationSample createEvalSample(@RequestBody Map<String, String> body) {
-
-        String text = Optional.ofNullable(body.get("text"))
-                .orElse("")
-                .trim();
-
-        String trueLabel = Optional.ofNullable(body.get("trueLabel"))
-                .orElse("")
-                .toLowerCase()
-                .trim();
-
-        if (text.isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "ต้องระบุ text"
-            );
-        }
-
-        if (!trueLabel.equals("positive") &&
-                !trueLabel.equals("neutral") &&
-                !trueLabel.equals("negative")) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "trueLabel ต้องเป็น positive / neutral / negative"
-            );
-        }
-
-        EvaluationSample s = new EvaluationSample();
-        s.setText(text);
-        s.setTrueLabel(trueLabel);
-
-        return evalRepo.save(s);
-    }
-
-    // ------------------------------------------------------------
-    // 1.3) Evaluation Samples: ลบตัวอย่างตาม id
-    // ------------------------------------------------------------
-    @DeleteMapping("/eval/samples/{id}")
-    public Map<String, Object> deleteEvalSample(@PathVariable Long id) {
-        if (!evalRepo.existsById(id)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "ไม่พบ evaluation_sample id=" + id
-            );
-        }
-        evalRepo.deleteById(id);
-        return Map.of("status", "ok");
-    }
+//    @GetMapping("/eval")
+//    public Map<String, Object> evaluateModel() {
+//
+//        List<EvaluationSample> samples = evalRepo.findAll();
+//        if (samples == null || samples.isEmpty()) {
+//            return Map.of(
+//                    "status", "error",
+//                    "message", "ยังไม่มีข้อมูลในตาราง evaluation_samples"
+//            );
+//        }
+//
+//        int total = 0;     // นับเฉพาะ sample ที่ใช้คำนวณจริง (มี text)
+//        int correct = 0;
+//
+//        Map<String, Integer> tp = new HashMap<>();
+//        Map<String, Integer> fp = new HashMap<>();
+//        Map<String, Integer> fn = new HashMap<>();
+//
+//        for (EvaluationSample s : samples) {
+//            // ----- กัน text เป็น null / ว่าง -----
+//            String text = Optional.ofNullable(s.getText())
+//                    .orElse("")
+//                    .trim();
+//            if (text.isEmpty()) {
+//                // ถ้าไม่มีข้อความ ข้ามไปเลย ไม่เอามาคิด
+//                continue;
+//            }
+//
+//            // label ที่มนุษย์ให้ (gold)
+//            String gold = Optional.ofNullable(s.getTrueLabel())
+//                    .orElse("neutral")
+//                    .toLowerCase()
+//                    .trim();
+//
+//            String pred;
+//
+//            try {
+//                // เรียก ONNX วิเคราะห์
+//                OnnxSentimentService.SentimentResult res = onnx.analyze(text);
+//                pred = Optional.ofNullable(res.getLabel())
+//                        .orElse("neutral")
+//                        .toLowerCase()
+//                        .trim();
+//            } catch (Exception ex) {
+//                // ถ้า ONNX พัง (เช่น โมเดลไม่โหลด / อื่น ๆ) -> log แล้วข้ามตัวอย่างนี้
+//                System.err.println("[EVAL] ONNX analyze failed for sample id="
+//                        + s.getId() + " : " + ex.getMessage());
+//                continue;
+//            }
+//
+//            total++; // sample นี้ถูกนำมาคิดจริง
+//
+//            if (gold.equals(pred)) {
+//                correct++;
+//                tp.put(gold, tp.getOrDefault(gold, 0) + 1);
+//            } else {
+//                fp.put(pred, fp.getOrDefault(pred, 0) + 1);
+//                fn.put(gold, fn.getOrDefault(gold, 0) + 1);
+//            }
+//        }
+//
+//        if (total == 0) {
+//            // ไม่มี sample ไหนที่ใช้คำนวณได้เลย
+//            return Map.of(
+//                    "status", "error",
+//                    "message", "ไม่มีชุดทดสอบที่มีข้อความสำหรับประเมินโมเดล"
+//            );
+//        }
+//
+//        double accuracy = (double) correct / total;
+//
+//        Map<String, Map<String, Double>> perClass = new HashMap<>();
+//        for (String label : List.of("positive", "neutral", "negative")) {
+//            int tpL = tp.getOrDefault(label, 0);
+//            int fpL = fp.getOrDefault(label, 0);
+//            int fnL = fn.getOrDefault(label, 0);
+//
+//            double precision = (tpL + fpL == 0) ? 0.0 : (double) tpL / (tpL + fpL);
+//            double recall    = (tpL + fnL == 0) ? 0.0 : (double) tpL / (tpL + fnL);
+//            double f1        = (precision + recall == 0)
+//                    ? 0.0
+//                    : 2 * precision * recall / (precision + recall);
+//
+//            Map<String, Double> m = new HashMap<>();
+//            m.put("precision", precision);
+//            m.put("recall", recall);
+//            m.put("f1", f1);
+//
+//            perClass.put(label, m);
+//        }
+//
+//        Map<String, Object> res = new HashMap<>();
+//        res.put("status", "ok");
+//        res.put("totalSamples", total);
+//        res.put("accuracy", accuracy);
+//        res.put("perClass", perClass);
+//
+//        return res;
+//    }
+//
+//    // ------------------------------------------------------------
+//    // 1.1) Evaluation Samples: ดึงรายการทั้งหมดให้ผู้ใช้ดู/จัดการ
+//    // ------------------------------------------------------------
+//    @GetMapping("/eval/samples")
+//    public List<EvaluationSample> getAllEvalSamples() {
+//        return evalRepo.findAll();
+//    }
+//
+//    // ------------------------------------------------------------
+//    // 1.2) Evaluation Samples: เพิ่มตัวอย่างใหม่ (text + trueLabel)
+//    //      body JSON: { "text": "...", "trueLabel": "positive|neutral|negative" }
+//    // ------------------------------------------------------------
+//    @PostMapping("/eval/samples")
+//    public EvaluationSample createEvalSample(@RequestBody Map<String, String> body) {
+//
+//        String text = Optional.ofNullable(body.get("text"))
+//                .orElse("")
+//                .trim();
+//
+//        String trueLabel = Optional.ofNullable(body.get("trueLabel"))
+//                .orElse("")
+//                .toLowerCase()
+//                .trim();
+//
+//        if (text.isEmpty()) {
+//            throw new ResponseStatusException(
+//                    HttpStatus.BAD_REQUEST,
+//                    "ต้องระบุ text"
+//            );
+//        }
+//
+//        if (!trueLabel.equals("positive") &&
+//                !trueLabel.equals("neutral") &&
+//                !trueLabel.equals("negative")) {
+//            throw new ResponseStatusException(
+//                    HttpStatus.BAD_REQUEST,
+//                    "trueLabel ต้องเป็น positive / neutral / negative"
+//            );
+//        }
+//
+//        EvaluationSample s = new EvaluationSample();
+//        s.setText(text);
+//        s.setTrueLabel(trueLabel);
+//
+//        return evalRepo.save(s);
+//    }
+//
+//    // ------------------------------------------------------------
+//    // 1.3) Evaluation Samples: ลบตัวอย่างตาม id
+//    // ------------------------------------------------------------
+//    @DeleteMapping("/eval/samples/{id}")
+//    public Map<String, Object> deleteEvalSample(@PathVariable Long id) {
+//        if (!evalRepo.existsById(id)) {
+//            throw new ResponseStatusException(
+//                    HttpStatus.NOT_FOUND,
+//                    "ไม่พบ evaluation_sample id=" + id
+//            );
+//        }
+//        evalRepo.deleteById(id);
+//        return Map.of("status", "ok");
+//    }
 
     // ------------------------------------------------------------
     // 1.4) Playground: ให้ผู้ใช้ลองพิมพ์ข้อความ แล้วให้ ONNX วิเคราะห์สด
