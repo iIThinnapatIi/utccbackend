@@ -12,7 +12,7 @@ import java.util.Map;
 @RequestMapping("/pantip")
 public class PantipController {
 
-    // ⭐ ใช้ทั้ง service ใหม่ (temp) และตัว scraper เดิม
+    // ใช้ทั้ง service ใหม่ (temp) และตัว scraper เดิม
     private final PantipTempService tempService;
     private final PantipScraperService scraperService;
 

@@ -13,7 +13,6 @@ public class Analysis {
     @Id
     private String id;
 
-    // ✅ เอา @Lob ออก เหลือ TEXT เฉย ๆ
     @Column(name = "text", columnDefinition = "TEXT")
     private String text;
 

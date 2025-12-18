@@ -22,7 +22,7 @@ public class CorsConfig {
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
-                // ❌ ไม่ต้องใช้ allowCredentials เพราะ frontend ไม่ใช้ cookies/session
+                // ไม่ต้องใช้ allowCredentials เพราะ frontend ไม่ใช้ cookies/session
             }
         };
     }

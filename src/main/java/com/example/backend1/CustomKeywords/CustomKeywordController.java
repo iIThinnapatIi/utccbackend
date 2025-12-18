@@ -28,7 +28,7 @@ public class CustomKeywordController {
         return repo.save(ck);
     }
 
-    // ⭐ อัปเดต sentiment (ใช้ตอนเปลี่ยน dropdown บนหน้าเว็บ)
+    // อัปเดต sentiment (ใช้ตอนเปลี่ยน dropdown บนหน้าเว็บ)
     @PutMapping("/{id}")
     public CustomKeyword update(
             @PathVariable Long id,

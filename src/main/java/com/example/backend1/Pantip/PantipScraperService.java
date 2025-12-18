@@ -42,9 +42,9 @@ public class PantipScraperService {
         this.commentRepo = commentRepo;
     }
 
-    /* ---------------------------------------------------------
-     * 1) โหมด TEMP — ใช้ตอนค้นหาโพสต์จากหน้า Keywords
-     * --------------------------------------------------------- */
+
+//1) โหมด TEMP — ใช้ตอนค้นหาโพสต์จากหน้า Keywords
+
     public List<PantipPost> scrapePantipTemp(String keyword) {
 
         // ถ้า server นี้ไม่อนุญาตให้ดึง Pantip ให้แจ้งเหตุผลตรง ๆ

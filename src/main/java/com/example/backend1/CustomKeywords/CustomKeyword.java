@@ -17,7 +17,7 @@ public class CustomKeyword {
     private String keyword;
     private String sentiment;
 
-    // ⭐ ผูกกับ user.id (ใครเป็นคนสร้าง/แก้)
+    //ผูกกับ user.id (ใครเป็นคนสร้าง/แก้)
     private Integer userId;
 
     public Long getId() {

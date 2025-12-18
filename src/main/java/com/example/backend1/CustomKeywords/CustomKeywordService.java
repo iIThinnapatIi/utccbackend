@@ -10,7 +10,7 @@ import java.util.List;
 public class CustomKeywordService {
 
     private final CustomKeywordRepo repo;
-    private final CustomKeywordHistoryRepo historyRepo;   // ⭐ เพิ่ม
+    private final CustomKeywordHistoryRepo historyRepo;
 
     public CustomKeywordService(CustomKeywordRepo repo,
                                 CustomKeywordHistoryRepo historyRepo) {
@@ -74,9 +74,8 @@ public class CustomKeywordService {
         }
     }
 
-    // ===============================================================
-    // 🚀 เวอร์ชันใหม่ ใช้กับการบันทึก analysis_custom_keyword
-    // ===============================================================
+
+    // เวอร์ชันใหม่ ใช้กับการบันทึก analysis_custom_keyword
 
     /**
      * applySentiment เวอร์ชันใหม่ ที่รองรับการส่ง analysisId เข้าไป
@@ -109,9 +108,7 @@ public class CustomKeywordService {
         return ids;
     }
 
-    // ===============================================================
-    // ⭐ ส่วนใหม่: ใช้ตอนผู้ใช้ "แก้ sentiment" ของ keyword
-    // ===============================================================
+    // ส่วนใหม่: ใช้ตอนผู้ใช้ "แก้ sentiment" ของ keyword
     public CustomKeyword updateSentimentWithHistory(Long keywordId,
                                                     String newSentiment,
                                                     Long userId) {

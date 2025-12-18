@@ -2,7 +2,7 @@ package com.example.backend1.User;
 
 import org.springframework.web.bind.annotation.*;
 
-@CrossOrigin(origins = "*")   // ✅ อนุญาตทุก origin (Netlify / Render)
+@CrossOrigin(origins = "*")   // อนุญาตทุก origin (Netlify / Render)
 @RestController
 public class LoginController {
 

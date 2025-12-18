@@ -21,11 +21,11 @@ public class PantipTempService {
     private final OnnxSentimentService onnx;
     private final AnalysisRepository analysisRepo;
 
-    // ⭐ เพิ่มใหม่
+
     private final CustomKeywordService customKeywordService;
     private final AnalysisCustomKeywordRepo ackRepo;
 
-    // ⭐ Constructor ใหม่ (แต่คอมเมนต์เดิมไม่โดนลบ)
+    //Constructor ใหม่ (แต่คอมเมนต์เดิมไม่โดนลบ)
     public PantipTempService(
             PantipScraperService scraper,
             OnnxSentimentService onnx,
@@ -36,8 +36,8 @@ public class PantipTempService {
         this.scraper = scraper;
         this.onnx = onnx;
         this.analysisRepo = analysisRepo;
-        this.customKeywordService = customKeywordService; // ⭐ เพิ่ม
-        this.ackRepo = ackRepo;                           // ⭐ เพิ่ม
+        this.customKeywordService = customKeywordService;
+        this.ackRepo = ackRepo;
     }
 
     /*
@@ -67,7 +67,7 @@ public class PantipTempService {
                 continue;
             }
 
-            // 🔹 เรียก ONNX วิเคราะห์ sentiment + faculty
+            // เรียก ONNX วิเคราะห์ sentiment + faculty
             OnnxSentimentService.SentimentResult res = onnx.analyze(text);
 
             // เตรียม entity สำหรับตาราง social_analysis
@@ -85,7 +85,7 @@ public class PantipTempService {
             }
             row.setCreatedAt(createdAt);
 
-            // ⭐ เก็บชื่อคณะ + FK จากผล ONNX
+            // เก็บชื่อคณะ + FK จากผล ONNX
             String facName = res.getFacultyName() != null
                     ? res.getFacultyName()
                     : "ไม่ระบุ";
@@ -99,7 +99,7 @@ public class PantipTempService {
                 row.setFacultyRef(null);
             }
 
-            // --------------- ⭐ ใช้ Custom Keywords ปรับผล ---------------
+            // --------------- ใช้ Custom Keywords ปรับผล ---------------
             String finalLabel = customKeywordService.applyCustomSentiment(
                     row.getId(),            // analysisId
                     text,                   // text
@@ -108,13 +108,13 @@ public class PantipTempService {
 
             row.setSentiment(res.getLabel());   // ผลจาก AI
             row.setFinalLabel(finalLabel);      // ผลหลังถูกแก้โดย custom keyword
-            row.setSentimentScore(res.getScore());// ⭐ ใหม่: เก็บ score จาก ONNX
+            row.setSentimentScore(res.getScore());//เก็บ score จาก ONNX
             // -------------------------------------------------------------
 
             analysisRepo.save(row);
             saved++;
 
-            // --------------- ⭐ บันทึก keyword ที่ match ลงตารางกลาง ---------------
+            // --------------- บันทึก keyword ที่ match ลงตารางกลาง ---------------
             List<Long> matchedKeywordIds = customKeywordService.getMatchedKeywordIds(text);
 
             for (Long kid : matchedKeywordIds) {

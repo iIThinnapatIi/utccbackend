@@ -23,7 +23,7 @@ import java.util.Map;
 @Service
 public class OnnxSentimentService {
 
-    private final FacultyService facultyService;   // ⭐ ดึงคณะจาก DB
+    private final FacultyService facultyService;   //ดึงคณะจาก DB
 
     private OrtEnvironment env;
     private OrtSession session;
@@ -60,7 +60,7 @@ public class OnnxSentimentService {
             System.out.println("ONNX model loaded OK!");
 
         } catch (Exception e) {
-            // ❗ สำคัญ: ห้ามทำให้แอปล้ม ให้แค่เตือนแล้วใช้ fallback แทน
+            //สำคัญ: ห้ามทำให้แอปล้ม ให้แค่เตือนแล้วใช้ fallback แทน
             modelLoaded = false;
             session = null;
             tokenizer = null;
@@ -189,7 +189,7 @@ public class OnnxSentimentService {
         private String label;
         private double score;
 
-        // ⭐ อัปเดต: เก็บทั้ง id และชื่อของคณะ
+        //อัปเดต: เก็บทั้ง id และชื่อของคณะ
         private Long facultyId;
         private String facultyName;
 
@@ -221,7 +221,7 @@ public class OnnxSentimentService {
             this.facultyName = facultyName;
         }
 
-        // ✅ backward compatible: ถ้าที่อื่นยังเรียก getFaculty()/setFaculty()
+        // backward compatible: ถ้าที่อื่นยังเรียก getFaculty()/setFaculty()
         // ให้ผูกกับ facultyName แทน
         public String getFaculty() {
             return facultyName;

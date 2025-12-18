@@ -3,7 +3,7 @@ package com.example.backend1.User;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "app_user")   // ✅ ผูกกับตาราง app_user
+@Table(name = "app_user")   //ผูกกับตาราง app_user
 public class login {
 
     @Id
